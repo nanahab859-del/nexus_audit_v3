@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Nexus Audit V3 Settings",
+  "type": "object",
+  "required": ["project_path", "scanners"],
+  "properties": {
+    "project_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the project to audit"
+    },
+    "api_key": {
+      "type": ["string", "null"],
+      "description": "API key for AI provider"
+    },
+    "ai_enabled": {
+      "type": "boolean",
+      "description": "Enable AI features",
+      "default": false
+    },
+    "ai_provider": {
+      "type": "string",
+      "enum": ["gemini", "claude"],
+      "description": "AI provider to use",
+      "default": "claude"
+    },
+    "ai_model": {
+      "type": "string",
+      "description": "AI model identifier",
+      "default": "claude-opus-4-7"
+    },
+    "force_rescan": {
+      "type": "boolean",
+      "description": "Force rescan even if cache exists",
+      "default": false
+    },
+    "scanners": {
+      "type": "object",
+      "description": "Scanner enabled/disabled status",
+      "additionalProperties": {
+        "type": "boolean"
+      }
+    },
+    "scanner_configs": {
+      "type": "object",
+      "description": "Scanner-specific configuration",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI configuration",
+      "default": {}
+    }
+  },
+  "additionalProperties": true
+}
+

@@ -1,0 +1,29 @@
+{
+  "project_path": ".",
+  "api_key": "gAAAAABqGt1J1NafssFfPjNMXfkTu7GPwhxK9Tl7IENOuvoee3-ShqnV1k8zAgCA-ET2ZhoJhisNbFAU0MXmgX55_hxrOfgeHw==",
+  "ai_enabled": true,
+  "ai_provider": "claude",
+  "ai_model": "claude-opus-4-7",
+  "force_rescan": false,
+  "scanners": {},
+  "scanner_configs": {
+    "bandit": {
+      "exclude_dirs": [
+        "tests",
+        "migrations",
+        "venv",
+        ".venv"
+      ]
+    },
+    "vulture": {
+      "min_confidence": 60
+    },
+    "radon": {
+      "min_rank": "C"
+    },
+    "safety": {
+      "skip_packages": []
+    }
+  },
+  "ui": {}
+}
