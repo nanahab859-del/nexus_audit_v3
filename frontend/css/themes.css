@@ -1,0 +1,20 @@
+/* themes.css */
+/* Minimal themes.css for now, primarily dark theme is handled in variables.css */
+
+[data-theme="light"] {
+  --bg-base:      #f8fafc;
+  --bg-surface:   #ffffff;
+  --bg-elevated:  #f1f5f9;
+  --bg-overlay:   #e2e8f0;
+  --bg-input:     #ffffff;
+  --bg-hover:     rgba(56,189,248,0.04);
+
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --text-inverse:   #ffffff;
+
+  --border-subtle:  rgba(0,0,0,0.04);
+  --border-default: rgba(0,0,0,0.08);
+  --border-strong:  rgba(0,0,0,0.16);
+}
