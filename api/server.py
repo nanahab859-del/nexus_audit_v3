@@ -1,9 +1,18 @@
 from aiohttp import web
 from pathlib import Path
 from api import routes_data, routes_run, routes_settings, routes_stream
+from core.events import EventBus
+from orchestrator import Orchestrator
 
 def create_app(argv=None) -> web.Application:
     app = web.Application()
+    
+    bus = EventBus()
+    orchestrator = Orchestrator(bus)
+    
+    app['bus'] = bus
+    app['orchestrator'] = orchestrator
+
     FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 
     # API routes registered FIRST (highest priority)

@@ -39,6 +39,14 @@ class EventBus:
 
     def subscribe_all(self, callback: Callable[[int, Event], Awaitable]):
         self._all_subscribers.add(callback)
+
+    def unsubscribe(self, event_type: EventType, callback: Callable[[Event], Awaitable]):
+        if callback in self._subscribers[event_type]:
+            self._subscribers[event_type].remove(callback)
+
+    def unsubscribe_all(self, callback: Callable[[int, Event], Awaitable]):
+        if callback in self._all_subscribers:
+            self._all_subscribers.remove(callback)
         
     def get_history(self, since_id: int) -> list[tuple[int, Event]]:
         return [(eid, ev) for eid, ev in self._history if eid > since_id]
