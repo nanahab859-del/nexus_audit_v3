@@ -1,35 +1,37 @@
-import hashlib
-import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import IntEnum, Enum
-from pathlib import Path
-from typing import Literal
+from enum import Enum
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
-UTC = timezone.utc
-
-
-class Severity(IntEnum):
-    """Severity levels ordered from lowest to highest."""
-    INFO = 1
-    LOW = 2
-    MEDIUM = 3
-    HIGH = 4
-    CRITICAL = 5
-
+class Severity(Enum):
+    CRITICAL = "CRITICAL"
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    INFO = "INFO"
 
 class Category(Enum):
-    """Finding categories."""
     SECURITY = "security"
     QUALITY = "quality"
     PERFORMANCE = "performance"
     DEPENDENCY = "dependency"
     ARCHITECTURE = "architecture"
 
+class Persistence(Enum):
+    NEW = "new"
+    PERSISTENT = "persistent"
+    INTERMITTENT = "intermittent"
+    RESOLVED = "resolved"
 
-@dataclass(frozen=True)
+class FixStatus(Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+    SNOOZED = "snoozed"
+
+@dataclass
 class Finding:
-    """Immutable finding from a scanner."""
+    id: str
     scanner: str
     file: str
     line: int
@@ -38,51 +40,55 @@ class Finding:
     category: Category
     title: str
     description: str
-    suggestion: str | None = None
-    cwe: str | None = None
-    cvss_score: float | None = None
-    id: str = field(init=False)
+    suggestion: Optional[str] = None
+    cwe: Optional[str] = None
+    cvss_score: Optional[float] = None
+    persistence: Persistence = Persistence.NEW
+    fix_status: FixStatus = FixStatus.OPEN
 
-    def __post_init__(self) -> None:
-        # Compute deterministic id from content
-        content = f"{self.scanner}:{self.file}:{self.line}:{self.title}"
-        hash_val = hashlib.sha256(content.encode()).hexdigest()[:16]
-        object.__setattr__(self, "id", hash_val)
-
+def finding_to_dict(f: Finding) -> dict:
+    return {
+        "id":          f.id,
+        "scanner":     f.scanner,
+        "file":        f.file,
+        "line":        f.line,
+        "column":      f.column,
+        "severity":    f.severity.name,
+        "category":    f.category.value,
+        "title":       f.title,
+        "description": f.description,
+        "suggestion":  f.suggestion,
+        "cwe":         f.cwe,
+        "cvss_score":  f.cvss_score,
+        "persistence": f.persistence.value,
+        "fix_status":  f.fix_status.value,
+    }
 
 @dataclass
 class ScanResult:
-    """Result from one scanner run."""
     scanner: str
     started_at: datetime
-    finished_at: datetime | None = None
-    findings: list[Finding] = field(default_factory=list)
-    error: str | None = None
-
+    finished_at: datetime
+    findings: List[Finding]
 
 @dataclass
 class Job:
-    """Audit job tracking state."""
-    project_path: Path
+    id: str
+    project_path: str
     started_at: datetime
-    id: str = field(init=False)
-    finished_at: datetime | None = None
-    state: Literal["running", "completed", "cancelled", "failed"] = "running"
-    scan_results: list[ScanResult] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "id", str(uuid.uuid4()))
-
+    finished_at: Optional[datetime] = None
+    state: str = "running"
+    scan_results: List[ScanResult] = field(default_factory=list)
+    git_context: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class Settings:
-    """Application settings."""
-    project_path: Path
-    api_key: str | None = None
+    project_path: str
+    api_key: Optional[str] = None
     ai_enabled: bool = False
     ai_provider: str = "claude"
     ai_model: str = "claude-opus-4-7"
     force_rescan: bool = False
-    scanners: dict[str, bool] = field(default_factory=dict)
-    scanner_configs: dict[str, dict] = field(default_factory=dict)
-    ui: dict = field(default_factory=dict)
+    scanners: Dict[str, bool] = field(default_factory=dict)
+    scanner_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    ui: Dict[str, Any] = field(default_factory=dict)
