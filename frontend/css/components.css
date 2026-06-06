@@ -96,6 +96,43 @@
   border: 1px solid var(--status-critical);
 }
 
+.badge-cancelled {
+  background-color: rgba(168, 85, 247, 0.1);
+  color: var(--accent-secondary);
+  border: 1px solid var(--accent-secondary);
+}
+
+/* Severity Badges */
+.badge-critical {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--status-critical);
+  border: 1px solid var(--status-critical);
+}
+
+.badge-high {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: var(--status-high);
+  border: 1px solid var(--status-high);
+}
+
+.badge-medium {
+  background-color: rgba(251, 146, 60, 0.1);
+  color: var(--status-medium);
+  border: 1px solid var(--status-medium);
+}
+
+.badge-low {
+  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--status-low);
+  border: 1px solid var(--status-low);
+}
+
+.badge-info {
+  background-color: rgba(56, 189, 248, 0.1);
+  color: var(--status-info);
+  border: 1px solid var(--status-info);
+}
+
 /* Severity Cards */
 .severity-cards {
   display: grid;

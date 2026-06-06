@@ -4,6 +4,7 @@ import * as api   from './api.js';
 import * as router from './router.js';
 import { initStream } from './stream.js';
 import { initDashboard } from './views/dashboard.js';
+import { initPlaceholderViews } from './views/placeholder.js';
 
 async function init() {
   // 1. Wire router
@@ -29,6 +30,7 @@ async function init() {
 
   // 7. Init all views
   initDashboard();
+  initPlaceholderViews();
 
   // 8. Start SSE stream
   initStream();
