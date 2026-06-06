@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "job_id": "test-uuid",
+    "project_path": "/test",
+    "started_at": "2026-06-05T00:00:00Z",
+    "finished_at": "2026-06-05T00:01:00Z",
+    "total_findings": 2,
+    "total_violations": 1,
+    "git_context": {}
+  },
+  "findings": [
+    {
+      "id": "1",
+      "scanner": "bandit",
+      "file": "app.py",
+      "line": 10,
+      "column": 1,
+      "severity": "CRITICAL",
+      "category": "security",
+      "title": "Hardcoded password",
+      "description": "Found a hardcoded password",
+      "suggestion": "Use env var",
+      "persistence": "new",
+      "fix_status": "open"
+    },
+    {
+      "id": "2",
+      "scanner": "radon",
+      "file": "app.py",
+      "line": 20,
+      "column": 1,
+      "severity": "LOW",
+      "category": "quality",
+      "title": "High complexity",
+      "description": "Function is too complex",
+      "suggestion": "Refactor",
+      "persistence": "new",
+      "fix_status": "open"
+    }
+  ],
+  "apps": {
+    "Web": { "score": 85, "is_hub": true },
+    "API": { "score": 92, "is_hub": false }
+  },
+  "fleet_average": 88.5,
+  "coupling_matrix": { "apps": ["Web", "API"], "matrix": [[0, 1], [1, 0]], "details": {} },
+  "dna": {},
+  "config_health": [],
+  "dependency_scan": [],
+  "recommendations": [],
+  "change_summary": { "first_run": false, "new_violations": 1, "resolved_violations": 0, "score_deltas": {} },
+  "rules_summary": []
+}

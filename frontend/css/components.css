@@ -228,6 +228,93 @@
   text-overflow: ellipsis;
 }
 
+/* Score Cards & Health */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+}
+
+.fleet-score-card, .app-score-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.fleet-score-value, .app-score-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: var(--space-2);
+}
+
+.score-unit {
+  font-size: var(--text-xl);
+  color: var(--text-secondary);
+}
+
+.fleet-score-label, .app-score-name {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.hub-badge {
+  background-color: var(--accent-secondary);
+  color: white;
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  margin-left: var(--space-1);
+}
+
+.app-score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.score-excellent { border-top: 4px solid var(--status-low); }
+.score-good      { border-top: 4px solid var(--status-info); }
+.score-fair      { border-top: 4px solid var(--status-medium); }
+.score-poor      { border-top: 4px solid var(--status-critical); }
+
+.score-excellent .fleet-score-value, .score-excellent .app-score-value { color: var(--status-low); }
+.score-good      .fleet-score-value, .score-good      .app-score-value { color: var(--status-info); }
+.score-fair      .fleet-score-value, .score-fair      .app-score-value { color: var(--status-medium); }
+.score-poor      .fleet-score-value, .score-poor      .app-score-value { color: var(--status-critical); }
+
+/* Change Banner */
+.change-banner {
+  background-color: rgba(129, 140, 248, 0.1);
+  border: 1px solid var(--accent-secondary);
+  color: var(--text-primary);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-6);
+  font-size: var(--text-sm);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-16);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 64px;
+  margin-bottom: var(--space-4);
+  opacity: 0.5;
+}
+
 /* Logs */
 .log-line {
   margin-bottom: 2px;

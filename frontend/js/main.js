@@ -3,11 +3,7 @@ import * as store from './store.js';
 import * as api   from './api.js';
 import * as router from './router.js';
 import { initStream } from './stream.js';
-
-// Placeholder for view initializers (to be implemented in Step 5)
-const initViews = () => {
-    console.log('Views initialized');
-};
+import { initDashboard } from './views/dashboard.js';
 
 async function init() {
   // 1. Wire router
@@ -31,8 +27,8 @@ async function init() {
   store.subscribe('scanProgress', updateProgressBars);
   store.subscribe('logLines', updateLogOutput);
 
-  // 7. Init all views (placeholder for now)
-  initViews();
+  // 7. Init all views
+  initDashboard();
 
   // 8. Start SSE stream
   initStream();
