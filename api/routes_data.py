@@ -20,6 +20,7 @@ _EMPTY_DATA_RESPONSE = {
                  "finished_at": None, "total_findings": 0, "total_violations": 0,
                  "git_context": {}},
     "findings": [],
+    "scan_results": [],
     "apps": {},
     "fleet_average": 0.0,
     "coupling_matrix": {"apps": [], "matrix": [], "details": {}},

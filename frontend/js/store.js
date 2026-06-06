@@ -17,6 +17,7 @@ const _initial = {
   recommendations: [],
   change_summary: { first_run: true, new_violations: 0, resolved_violations: 0, score_deltas: {} },
   rules_summary:  [],
+  scannerErrors: {},   // { scanner_name: error_message }
 
   // UI state (local only, not from server)
   activeView:    'dashboard',
@@ -52,9 +53,14 @@ const _state = new Proxy({ ..._initial }, {
 });
 
 // Public API
-export function get(key) { return _state[key]; }
+export function get(key) { 
+  return _state[key]; 
+}
 
 export function set(key, value) {
+  if (key === 'logLines' && value.length > 0) {
+    console.log('[Store] logLines updated:', value.length, 'total lines');
+  }
   _state[key] = value;   // triggers Proxy setter → _notify
 }
 
@@ -85,14 +91,25 @@ export function setAuditData(data) {
   set('recommendations', data.recommendations || []);
   set('change_summary',  data.change_summary  || _initial.change_summary);
   set('rules_summary',   data.rules_summary   || []);
+  
+  // NEW: Map scanner errors from ScanResult
+  const scannerErrors = (data.scan_results || [])
+      .filter(sr => sr.error)
+      .reduce((acc, sr) => ({
+          ...acc,
+          [sr.scanner]: sr.error
+      }), {});
+  set('scannerErrors', scannerErrors);
 }
 
 export function appendFinding(finding) {
   // Called when SSE 'finding' event arrives during a live scan
+  console.log('[Store] New finding appended:', finding.title);
   set('findings', [...get('findings'), finding]);
 }
 
 export function setProgress(scanner, percent, file) {
+  console.log('[Store] Progress updated:', scanner, percent + '%');
   const current = { ...(get('scanProgress') || {}) };
   current[scanner] = { percent, file };
   set('scanProgress', current);
@@ -101,6 +118,7 @@ export function setProgress(scanner, percent, file) {
 export function appendLog(level, message) {
   const lines = get('logLines');
   const updated = [...lines, { level, message, time: new Date().toISOString() }];
+  console.log('[Store] Log appended:', `[${level}]`, message);
   set('logLines', updated.slice(-200));   // keep last 200
 }
 

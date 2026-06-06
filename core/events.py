@@ -50,3 +50,18 @@ class EventBus:
         
     def get_history(self, since_id: int) -> list[tuple[int, Event]]:
         return [(eid, ev) for eid, ev in self._history if eid > since_id]
+    
+    async def publish_log(self, level: str, message: str):
+        """Convenience method to publish a LOG event."""
+        await self.publish(EventType.LOG, {
+            "level": level,
+            "message": message
+        })
+    
+    async def publish_progress(self, scanner: str, percent: int, file: str):
+        """Convenience method to publish a PROGRESS event."""
+        await self.publish(EventType.PROGRESS, {
+            "scanner": scanner,
+            "percent": percent,
+            "file": file
+        })

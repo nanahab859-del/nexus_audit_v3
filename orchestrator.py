@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -8,6 +9,7 @@ from core.models import Job, Settings, Finding, finding_to_dict, ScanResult
 from core.events import EventBus, EventType
 from core.atomic import write_json
 from core.registry import PluginRegistry
+from core.language_detection import detect_languages, is_language_supported
 from plugins.base import BaseScanner
 
 UTC = timezone.utc
@@ -70,7 +72,7 @@ class Orchestrator:
     async def run(self, job: Job, settings: Settings):
         """
         Phase 3: Run scanners in parallel per Section 4.3 of TECHNICAL_SPEC.md
-        Loads registry, runs enabled scanners, collects findings, writes audit_data_complete.json
+        Loads registry, detects languages, filters scanners, collects findings, writes audit_data_complete.json
         """
         try:
             await self.bus.publish(EventType.LOG, {"level": "info", "message": "Loading scanner plugins..."})
@@ -79,11 +81,24 @@ class Orchestrator:
             registry = PluginRegistry(Path("plugins"))
             registry.load()
             
-            # Prepare scanner tasks
-            scanner_tasks = []
+            # Detect programming languages in target
             working_path = Path(settings.project_path)
+            await self.bus.publish(EventType.LOG, {"level": "info", "message": f"Detecting languages in {working_path}..."})
+            detected_languages = detect_languages(working_path)
             
-            await self.bus.publish(EventType.LOG, {"level": "info", "message": f"Scanning {working_path}..."})
+            if detected_languages:
+                await self.bus.publish(EventType.LOG, {
+                    "level": "info",
+                    "message": f"Detected languages: {', '.join(sorted(detected_languages))}"
+                })
+            else:
+                await self.bus.publish(EventType.LOG, {
+                    "level": "warning",
+                    "message": "No recognized source files found. Proceeding anyway..."
+                })
+            
+            # Prepare scanner tasks, filtering by language compatibility
+            scanner_tasks = []
             
             for name, enabled in settings.scanners.items():
                 if not enabled:
@@ -94,8 +109,21 @@ class Orchestrator:
                     await self.bus.publish(EventType.LOG, {"level": "warning", "message": f"Scanner not found: {name}"})
                     continue
                 
+                # Check language compatibility
+                if not is_language_supported(cls.languages, detected_languages):
+                    await self.bus.publish(EventType.LOG, {
+                        "level": "info",
+                        "message": f"Skipping '{name}' (supports {', '.join(cls.languages)}, target has {', '.join(sorted(detected_languages)) if detected_languages else 'unknown languages'})"
+                    })
+                    continue
+                
                 config = settings.scanner_configs.get(name, {})
                 config["_force_rescan"] = settings.force_rescan
+                
+                await self.bus.publish(EventType.LOG, {
+                    "level": "info",
+                    "message": f"Running '{name}' scanner..."
+                })
                 
                 # Create scanner task
                 task = asyncio.create_task(
@@ -104,7 +132,7 @@ class Orchestrator:
                 scanner_tasks.append((name, task))
             
             if not scanner_tasks:
-                await self.bus.publish(EventType.LOG, {"level": "warning", "message": "No enabled scanners found"})
+                await self.bus.publish(EventType.LOG, {"level": "warning", "message": "No compatible scanners to run"})
                 scanner_findings = []
             else:
                 # Run all scanners in parallel
@@ -113,27 +141,56 @@ class Orchestrator:
                 )
                 
                 scanner_findings: list[Finding] = []
+                scanner_errors = []  # Track scanner errors for frontend visibility
+                
                 for i, result in enumerate(results):
                     scanner_name = scanner_tasks[i][0]
                     if isinstance(result, list):
-                        scanner_findings.extend(result)
+                        # Scanners now handle errors internally and return []
                         job.scan_results.append(ScanResult(
                             scanner=scanner_name,
                             started_at=datetime.now(UTC),
                             finished_at=datetime.now(UTC),
-                            findings=result
+                            findings=result,
+                            error=None
                         ))
+                        scanner_findings.extend(result)
                         await self.bus.publish(EventType.LOG, {
                             "level": "info",
                             "message": f"Scanner '{scanner_name}' found {len(result)} findings"
                         })
                     elif isinstance(result, Exception):
+                        # Unexpected exception (not a missing-tool error, which scanner handles)
+                        error_msg = str(result)
+                        scanner_errors.append(error_msg)
+                        job.scan_results.append(ScanResult(
+                            scanner=scanner_name,
+                            started_at=datetime.now(UTC),
+                            finished_at=datetime.now(UTC),
+                            findings=[],
+                            error=error_msg
+                        ))
                         await self.bus.publish(EventType.LOG, {
                             "level": "error",
-                            "message": f"Scanner '{scanner_name}' failed: {str(result)}"
+                            "message": f"Scanner '{scanner_name}' failed: {error_msg}"
                         })
+                
+                # Audit completes successfully (even if some scanners unavailable)
+                # Frontend will show warning banner for any scanner errors
             
             # Build and write audit_data_complete.json
+            await self.bus.publish(EventType.LOG, {
+                "level": "info",
+                "message": f"[ORCHESTRATOR DEBUG] Collected {len(scanner_findings)} total findings from all scanners"
+            })
+            
+            # Debug: show breakdown
+            for sr in job.scan_results:
+                await self.bus.publish(EventType.LOG, {
+                    "level": "debug",
+                    "message": f"[ORCHESTRATOR DEBUG] Scanner '{sr.scanner}': {len(sr.findings)} findings"
+                })
+            
             audit_data = {
                 "metadata": {
                     "job_id": job.id,
@@ -145,6 +202,16 @@ class Orchestrator:
                     "git_context": job.git_context or {}
                 },
                 "findings": [finding_to_dict(f) for f in scanner_findings],
+                "scan_results": [
+                    {
+                        "scanner": sr.scanner,
+                        "started_at": sr.started_at.isoformat(),
+                        "finished_at": sr.finished_at.isoformat(),
+                        "findings": [finding_to_dict(f) for f in sr.findings],
+                        "error": sr.error
+                    }
+                    for sr in job.scan_results
+                ],
                 "apps": {},
                 "coupling_matrix": {},
                 "dna": {"modules": []},
@@ -155,7 +222,28 @@ class Orchestrator:
                 "rules_summary": {}
             }
             
+            # Debug: verify data before write
+            await self.bus.publish(EventType.LOG, {
+                "level": "debug",
+                "message": f"[ORCHESTRATOR DEBUG] audit_data findings count: {len(audit_data['findings'])}"
+            })
+            
             await write_json(Path("audit_data_complete.json"), audit_data)
+            
+            # Debug: verify file was written
+            from core.atomic import read_json
+            verify = await read_json(Path("audit_data_complete.json"))
+            if verify:
+                await self.bus.publish(EventType.LOG, {
+                    "level": "info",
+                    "message": f"[ORCHESTRATOR DEBUG] ✓ File written and verified: {len(verify.get('findings', []))} findings in file"
+                })
+            else:
+                await self.bus.publish(EventType.LOG, {
+                    "level": "error",
+                    "message": f"[ORCHESTRATOR DEBUG] ✗ File write FAILED - file is empty or unreadable!"
+                })
+            
             await self.bus.publish(EventType.LOG, {
                 "level": "info",
                 "message": f"Wrote audit_data_complete.json with {len(scanner_findings)} findings"
@@ -187,11 +275,21 @@ class Orchestrator:
                 "file": str(target)
             })
             
+            await self.bus.publish(EventType.LOG, {
+                "level": "debug",
+                "message": f"[SCANNER DEBUG] '{name}' starting scan of {target}..."
+            })
+            
             # Run scanner with timeout
             findings = await asyncio.wait_for(
                 scanner_instance.scan(target, config, self.bus),
                 timeout=scanner_cls.timeout
             )
+            
+            await self.bus.publish(EventType.LOG, {
+                "level": "debug",
+                "message": f"[SCANNER DEBUG] '{name}' returned {len(findings) if findings else 0} findings"
+            })
             
             # Complete progress
             await self.bus.publish(EventType.PROGRESS, {
@@ -204,13 +302,13 @@ class Orchestrator:
         except asyncio.TimeoutError:
             await self.bus.publish(EventType.LOG, {
                 "level": "error",
-                "message": f"Scanner '{name}' timed out after {scanner_cls.timeout}s"
+                "message": f"[SCANNER DEBUG] Scanner '{name}' timed out after {scanner_cls.timeout}s"
             })
             return []
         except Exception as e:
             await self.bus.publish(EventType.LOG, {
                 "level": "error",
-                "message": f"Scanner '{name}' error: {str(e)}"
+                "message": f"[SCANNER DEBUG] Scanner '{name}' error: {str(e)}"
             })
             return []
 

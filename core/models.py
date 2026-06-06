@@ -70,6 +70,7 @@ class ScanResult:
     started_at: datetime
     finished_at: datetime
     findings: List[Finding]
+    error: Optional[str] = None
 
 @dataclass
 class Job:
