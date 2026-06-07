@@ -4,8 +4,12 @@ from core.settings import SettingsManager
 
 # Whitelist of allowed settings keys to prevent injection of invalid fields
 ALLOWED_SETTINGS_KEYS = {
-    "project_path", "api_key", "ai_enabled", "ai_provider",
-    "ai_model", "force_rescan", "scanners", "scanner_configs", "ui"
+    "project_path", "api_key", "ai_enabled", "ai_provider", "ai_model",
+    "force_rescan", "scanners", "scanner_configs", "ui",
+    # NEW
+    "project_name", "project_version", "primary_stack",
+    "inclusions", "exclusions", "enabled_extensions",
+    "output_format", "report_output_dir", "custom_metadata", "webhook_url",
 }
 
 async def get_settings(request: web.Request) -> web.Response:
