@@ -93,3 +93,20 @@ class Settings:
     scanners: Dict[str, bool] = field(default_factory=dict)
     scanner_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     ui: Dict[str, Any] = field(default_factory=dict)
+
+    # NEW fields
+    project_name:        str  = ""
+    project_version:     str  = ""
+    primary_stack:       str  = "Python"
+    inclusions:          List[str] = field(default_factory=list)
+    exclusions:          List[str] = field(default_factory=lambda: [
+                             "node_modules/**", ".venv/**", "tests/**",
+                             "migrations/**", "**/*.pyc"
+                         ])
+    enabled_extensions:  List[str] = field(default_factory=lambda: [
+                             ".py", ".js", ".json", ".go"
+                         ])
+    output_format:       str  = "JSON"
+    report_output_dir:   str  = ""
+    custom_metadata:     List[Dict[str, str]] = field(default_factory=list)
+    webhook_url:         str  = ""
