@@ -56,14 +56,33 @@
   <div id="view-settings"      class="view hidden"></div>
 </main>
 
-<div id="progress-panel" class="hidden">
-  <div class="progress-header">
-    <span id="progress-title">Audit Running</span>
-    <button id="btn-copy-logs" class="btn-secondary-sm" title="Copy all logs">📋 Copy</button>
-    <button id="btn-cancel-panel" class="btn-danger-sm">Cancel</button>
+<div id="progress-panel" class="audit-console hidden">
+
+  <!-- Row 1: Header — 24px -->
+  <div class="audit-console__header">
+    <span class="audit-console__title">Audit Running</span>
+    <div class="audit-console__actions">
+      <button id="btn-copy-log" class="console-btn console-btn--copy">
+        📋 Copy
+      </button>
+      <button id="btn-cancel-panel" class="console-btn console-btn--close">
+        ✕ Close
+      </button>
+    </div>
   </div>
-  <div id="scanner-bars"></div>
-  <div id="log-output"></div>
+
+  <!-- Row 2: Status bar — 18px, shown only after completion -->
+  <div id="console-status-bar" class="audit-console__status hidden">
+    <span class="status-bar__label">Scan Status:</span>
+    <span id="status-bar-scanners"></span>
+  </div>
+
+  <!-- Row 3: Scanner progress bars — compact, scrollable -->
+  <div id="scanner-bars" class="audit-console__bars"></div>
+
+  <!-- Row 4: Log pane — fills remaining height -->
+  <div id="log-output" class="audit-console__log"></div>
+
 </div>
 
 <div id="modal-overlay" class="hidden"></div>

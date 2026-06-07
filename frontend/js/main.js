@@ -36,9 +36,10 @@ async function init() {
     console.log('[BUTTON] Cancel panel button clicked');
     handleCancel();
   });
-  document.getElementById('btn-copy-logs').addEventListener('click', () => {
-    console.log('[BUTTON] Copy logs button clicked');
-    copyLogs();
+  document.getElementById('btn-copy-log')?.addEventListener('click', () => {
+    const lines = store.get('logLines') || [];
+    const text = lines.map(l => `${new Date(l.time).toTimeString().slice(0,8)} ${l.message}`).join('\n');
+    navigator.clipboard.writeText(text).catch(() => {});
   });
 
   // 4. Wire settings button
@@ -144,41 +145,7 @@ async function handleCancel() {
   }
 }
 
-function copyLogs() {
-  console.log('[copyLogs] Attempting to copy logs...');
-  const logOutput = document.getElementById('log-output');
-  if (!logOutput) {
-    console.warn('[copyLogs] Log output element not found!');
-    return;
-  }
-  
-  // Get all log lines as text
-  const logText = Array.from(logOutput.querySelectorAll('.log-line'))
-    .map(el => el.textContent)
-    .join('\n');
-  
-  if (!logText) {
-    console.warn('[copyLogs] No logs to copy');
-    alert('No logs to copy');
-    return;
-  }
-  
-  console.log('[copyLogs] Copying', logText.split('\n').length, 'lines to clipboard...');
-  
-  // Copy to clipboard
-  navigator.clipboard.writeText(logText).then(() => {
-    console.log('[copyLogs] ✓ Successfully copied to clipboard');
-    const btn = document.getElementById('btn-copy-logs');
-    const originalText = btn.textContent;
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => {
-      btn.textContent = originalText;
-    }, 2000);
-  }).catch(err => {
-    console.error('[copyLogs] ✗ Failed to copy:', err);
-    alert('Failed to copy: ' + err.message);
-  });
-}
+// copyLogs function removed because it's wired locally in init()
 
 function updateTopbarFromStatus(status) {
   console.log('[updateTopbarFromStatus] Status changed:', status);
@@ -231,42 +198,83 @@ function updateTopbarFromStatus(status) {
       titleEl.textContent = statusText;
       console.log('[updateTopbarFromStatus] Updated panel title:', statusText);
     }
+    
+    // After the run completes, populate the status bar
+    if (status.state === 'completed' || status.state === 'failed') {
+      const bar = document.getElementById('console-status-bar');
+      const names = document.getElementById('status-bar-scanners');
+      if (bar && names) {
+        const progress = store.get('scanProgress') || {};
+        names.innerHTML = Object.keys(progress).map(name =>
+          `<span class="status-badge">${name} <span style="color:#8b949e">(DONE)</span></span>`
+        ).join(' | ');
+        bar.classList.remove('hidden');
+      }
+    }
   }
 }
 
 function updateProgressBars(progress) {
   const container = document.getElementById('scanner-bars');
   if (!container) return;
-  
-  container.innerHTML = Object.entries(progress)
-    .map(([scanner, p]) => `
-      <div class="scanner-row">
-        <div class="scanner-row__track">
-          <div class="scanner-row__fill" style="width:${p.percent}%"></div>
-        </div>
-        <div class="scanner-row__name">${scanner}</div>
-        <div class="scanner-row__pct">${p.percent}%</div>
+  const entries = Object.entries(progress);
+  if (!entries.length) { container.innerHTML = ''; return; }
+  container.innerHTML = entries.map(([name, p]) => `
+    <div class="scanner-row">
+      <span class="scanner-row__name">${name}</span>
+      <div class="scanner-row__track">
+        <div class="scanner-row__fill" style="width:${p.percent ?? 0}%"></div>
       </div>
-    `).join('');
+      <span class="scanner-row__pct">${p.percent ?? 0}%</span>
+    </div>
+  `).join('');
 }
 
 function updateLogOutput(lines) {
   const el = document.getElementById('log-output');
   if (!el) return;
-  
+
+  const SCANNER_NAMES = new Set(['vulture','bandit','radon','lizard','semgrep','safety','django_settings']);
+
   el.innerHTML = lines.map(l => {
-    const t = new Date(l.time).toTimeString().slice(0,8);
-    return `
-      <div class="log-line log-line--${l.level}">
-        <div class="log-line__ts">${t}</div>
-        <div class="log-line__msg">${escapeHtml(l.message)}</div>
-      </div>
-    `;
+    const t   = new Date(l.time).toTimeString().slice(0,8);
+    const msg = l.message || '';
+
+    // Extract [TAG] if present
+    const tagMatch = msg.match(/^\[([A-Z_a-z0-9 ]+)\]\s*/);
+    let tag = '', body = msg;
+    if (tagMatch) {
+      tag  = tagMatch[1];
+      body = msg.slice(tagMatch[0].length);
+    }
+
+    // Determine CSS modifier
+    const lv  = (l.level || 'info').toLowerCase();
+    const isScanner = SCANNER_NAMES.has(tag.toLowerCase());
+    const isSuccess = body.includes('✓') || body.toLowerCase().includes('success');
+    const mod = isScanner ? 'scanner'
+              : isSuccess ? 'success'
+              : tag === 'DEBUG' ? 'debug'
+              : lv === 'error' ? 'error'
+              : lv === 'warning' ? 'warning'
+              : tag ? tag.toLowerCase().replace(/\s+/g,'-')
+              : 'info';
+
+    const tagHtml = tag
+      ? `<span class="log-line__tag">[${esc(tag)}]</span>`
+      : '';
+
+    return `<div class="log-line log-line--${mod}">
+      <span class="log-line__ts">${t}</span>
+      ${tagHtml}
+      <span class="log-line__msg">${esc(body)}</span>
+    </div>`;
   }).join('');
+
   el.scrollTop = el.scrollHeight;
 }
 
-function escapeHtml(s) {
+function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
