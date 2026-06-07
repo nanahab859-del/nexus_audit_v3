@@ -1,9 +1,9 @@
 {
   "metadata": {
-    "job_id": "cdc1e17a-f7a8-444c-a0eb-f1c12d49efbd",
+    "job_id": "d078bfcc-6467-4cac-a4aa-de3879426b2b",
     "project_path": "/home/yusupha/nexus-gaming",
-    "started_at": "2026-06-06T17:22:46.581814+00:00",
-    "finished_at": "2026-06-06T17:22:51.581197+00:00",
+    "started_at": "2026-06-07T18:52:01.915590+00:00",
+    "finished_at": "2026-06-07T18:52:11.493162+00:00",
     "total_findings": 1167,
     "total_violations": 0,
     "git_context": {}
@@ -18685,8 +18685,8 @@
   "scan_results": [
     {
       "scanner": "vulture",
-      "started_at": "2026-06-06T17:22:51.581122+00:00",
-      "finished_at": "2026-06-06T17:22:51.581126+00:00",
+      "started_at": "2026-06-07T18:52:11.493070+00:00",
+      "finished_at": "2026-06-07T18:52:11.493074+00:00",
       "findings": [
         {
           "id": "7c159295031d3ba4",
@@ -34229,8 +34229,8 @@
     },
     {
       "scanner": "bandit",
-      "started_at": "2026-06-06T17:22:51.581160+00:00",
-      "finished_at": "2026-06-06T17:22:51.581160+00:00",
+      "started_at": "2026-06-07T18:52:11.493099+00:00",
+      "finished_at": "2026-06-07T18:52:11.493100+00:00",
       "findings": [
         {
           "id": "fa14bf7b78e92bdb",

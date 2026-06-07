@@ -3,10 +3,6 @@
 import * as utils from '../utils.js';
 
 const placeholders = {
-  issues: {
-    title: 'Issues',
-    description: 'Issue tracking and filters will appear here once the audit produces findings.',
-  },
   violations: {
     title: 'Violations',
     description: 'Violation summaries and remediation guidance appear here after a scan.',

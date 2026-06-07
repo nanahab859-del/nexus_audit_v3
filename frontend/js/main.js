@@ -4,7 +4,9 @@ import * as api   from './api.js';
 import * as router from './router.js';
 import { initStream } from './stream.js';
 import { initDashboard } from './views/dashboard.js';
+import { initIssues } from './views/issues.js';
 import { initPlaceholderViews } from './views/placeholder.js';
+import { initSettings } from './views/settings.js';
 
 async function init() {
   console.log('[INIT] Starting application initialization...');
@@ -56,9 +58,11 @@ async function init() {
   store.subscribe('logLines', updateLogOutput);
 
   // 7. Init all views
-  console.log('[INIT] Initializing dashboard and placeholder views...');
+  console.log('[INIT] Initializing dashboard, issues, placeholder views, and settings...');
   initDashboard();
+  initIssues();
   initPlaceholderViews();
+  initSettings();
 
   // 8. Start SSE stream
   console.log('[INIT] Starting SSE stream...');
@@ -209,6 +213,11 @@ function updateTopbarFromStatus(status) {
         const data = await api.getData();
         console.log('[updateTopbarFromStatus] ✓ Audit data reloaded');
         store.setAuditData(data);
+        
+        // Reset filters when completed
+        if (status.state === 'completed') {
+          store.set('filters', { severity: null, scanner: null, category: null, search: '' });
+        }
       } catch (err) {
         console.error('[updateTopbarFromStatus] ✗ Failed to reload data:', err);
       }
@@ -226,36 +235,34 @@ function updateTopbarFromStatus(status) {
 }
 
 function updateProgressBars(progress) {
-  console.log('[updateProgressBars] Progress update:', Object.keys(progress).length, 'scanners');
   const container = document.getElementById('scanner-bars');
-  if (!container) {
-    console.warn('[updateProgressBars] Container not found!');
-    return;
-  }
+  if (!container) return;
   
-  container.innerHTML = Object.entries(progress).map(([scanner, p]) => `
-    <div class="scanner-bar">
-      <span class="scanner-name">${scanner}</span>
-      <div class="progress-track">
-        <div class="progress-fill" style="width:${p.percent}%"></div>
+  container.innerHTML = Object.entries(progress)
+    .map(([scanner, p]) => `
+      <div class="scanner-row">
+        <div class="scanner-row__track">
+          <div class="scanner-row__fill" style="width:${p.percent}%"></div>
+        </div>
+        <div class="scanner-row__name">${scanner}</div>
+        <div class="scanner-row__pct">${p.percent}%</div>
       </div>
-      <span class="progress-pct">${p.percent}%</span>
-      <span class="progress-file">${p.file || ''}</span>
-    </div>
-  `).join('');
+    `).join('');
 }
 
 function updateLogOutput(lines) {
-  console.log('[updateLogOutput] Log update:', lines.length, 'total lines (showing last 50)');
   const el = document.getElementById('log-output');
-  if (!el) {
-    console.warn('[updateLogOutput] Container not found!');
-    return;
-  }
+  if (!el) return;
   
-  el.innerHTML = lines.slice(-50).map(l =>
-    `<div class="log-line log-${l.level}">${escapeHtml(l.message)}</div>`
-  ).join('');
+  el.innerHTML = lines.map(l => {
+    const t = new Date(l.time).toTimeString().slice(0,8);
+    return `
+      <div class="log-line log-line--${l.level}">
+        <div class="log-line__ts">${t}</div>
+        <div class="log-line__msg">${escapeHtml(l.message)}</div>
+      </div>
+    `;
+  }).join('');
   el.scrollTop = el.scrollHeight;
 }
 
