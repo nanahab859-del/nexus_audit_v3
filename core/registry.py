@@ -66,6 +66,8 @@ class PluginRegistry:
                     and issubclass(obj, BaseScanner)
                     and obj is not BaseScanner
                 ):
+                    if getattr(obj, 'is_internal', False):
+                        continue
                     errors = validate_scanner_class(obj)
                     if errors:
                         for error in errors:

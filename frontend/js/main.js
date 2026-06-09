@@ -7,6 +7,7 @@ import { initDashboard } from './views/dashboard.js';
 import { initIssues } from './views/issues.js';
 import { initPlaceholderViews } from './views/placeholder.js';
 import { initSettings } from './views/settings.js';
+import { initConsole, showConsole, _applyConsolePrefs } from './views/console.js';
 
 async function init() {
   console.log('[INIT] Starting application initialization...');
@@ -59,11 +60,18 @@ async function init() {
   store.subscribe('logLines', updateLogOutput);
 
   // 7. Init all views
-  console.log('[INIT] Initializing dashboard, issues, placeholder views, and settings...');
+  console.log('[INIT] Initializing dashboard, issues, placeholder views, settings, and audit console...');
   initDashboard();
   initIssues();
   initPlaceholderViews();
   initSettings();
+
+  // Initialize the new Audit Console V3 overlay
+  initConsole();
+  _applyConsolePrefs();
+
+  // Mirror logLines → logs so console.js has a clean key to subscribe
+  store.subscribe('logLines', lines => store.set('logs', lines));
 
   // 8. Start SSE stream
   console.log('[INIT] Starting SSE stream...');
@@ -109,11 +117,12 @@ async function handleRun() {
   try {
     console.log('[handleRun] Clearing logs and progress...');
     store.set('logLines', []);
+    store.set('logs', []);
     store.set('scanProgress', {});
-    
-    console.log('[handleRun] Showing progress panel...');
-    document.getElementById('progress-panel').classList.remove('hidden');
-    
+
+    // Open the new Audit Console V3
+    showConsole();
+
     console.log('[handleRun] Calling api.startRun()...');
     await api.startRun();
     console.log('[handleRun] ✓ api.startRun() succeeded');

@@ -84,29 +84,74 @@ class Job:
 
 @dataclass
 class Settings:
-    project_path: str
-    api_key: Optional[str] = None
-    ai_enabled: bool = False
-    ai_provider: str = "claude"
-    ai_model: str = "claude-opus-4-7"
-    force_rescan: bool = False
-    scanners: Dict[str, bool] = field(default_factory=dict)
-    scanner_configs: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    ui: Dict[str, Any] = field(default_factory=dict)
+    # Core (existing)
+    project_path:     str  = ""
+    api_key:          Optional[str] = None
+    ai_enabled:       bool = False
+    ai_provider:      str  = "claude"
+    ai_model:         str  = "claude-opus-4-7"
+    force_rescan:     bool = False
+    scanners:         Dict[str, bool] = field(default_factory=dict)
+    scanner_configs:  Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    ui:               Dict[str, Any] = field(default_factory=dict)
 
-    # NEW fields
-    project_name:        str  = ""
-    project_version:     str  = ""
-    primary_stack:       str  = "Python"
-    inclusions:          List[str] = field(default_factory=list)
-    exclusions:          List[str] = field(default_factory=lambda: [
-                             "node_modules/**", ".venv/**", "tests/**",
-                             "migrations/**", "**/*.pyc"
-                         ])
-    enabled_extensions:  List[str] = field(default_factory=lambda: [
-                             ".py", ".js", ".json", ".go"
-                         ])
-    output_format:       str  = "JSON"
-    report_output_dir:   str  = ""
-    custom_metadata:     List[Dict[str, str]] = field(default_factory=list)
-    webhook_url:         str  = ""
+    # Project Identity
+    project_name:             str  = ""
+    project_key:              str  = ""         # NEW — slug, auto-derived
+    project_version:          str  = ""
+    primary_stack:            List[str] = field(default_factory=list)  # CHANGED: was str
+    project_description:      str  = ""         # NEW
+    project_owner:            str  = ""         # NEW
+    project_criticality_tier: str  = "Tier 3"  # NEW
+
+    # Source
+    source_type:              str  = "local"    # NEW — "local" | "remote"
+    source_remote_url:        str  = ""         # NEW
+    source_remote_branch:     str  = "main"     # NEW
+    source_remote_auth_type:  str  = "none"     # NEW — "none" | "ssh" | "token"
+    source_remote_token_env:  str  = ""         # NEW
+    source_remote_clone_depth:int  = 0          # NEW — 0 = full clone
+
+    # Audit Scope
+    inclusions:               List[str] = field(default_factory=list)
+    exclusions:               List[str] = field(default_factory=lambda: [
+                                  "node_modules/**", ".venv/**", "tests/**",
+                                  "migrations/**", "**/*.pyc", "dist/**", "build/**"
+                              ])
+    enabled_extensions:       List[str] = field(default_factory=lambda: [".py"])
+    test_pattern:             str  = ""         # NEW
+    max_file_size_kb:         int  = 500        # NEW
+
+    # Context
+    reachability_enabled:     bool = True       # NEW
+    telemetry_source:         str  = "none"     # NEW — "none"|"datadog"|"opentelemetry"
+
+    # Reporting
+    output_format:            str  = "JSON"     # kept for backward compat
+    output_formats:           List[str] = field(default_factory=lambda: ["json","html"])  # NEW
+    vex_formats:              List[str] = field(default_factory=list)  # NEW
+    include_suppressions:     bool = False      # NEW
+    report_output_dir:        str  = ""
+    report_filename_template: str  = ""         # NEW
+    report_retention_days:    int  = 0          # NEW
+    custom_metadata:          List[Dict[str,str]] = field(default_factory=list)
+
+    # AI Agent
+    ai_remediation_level:     str  = "suggest"  # NEW — "suggest"|"draft_pr"|"auto_merge"
+    ai_verify_with_tests:     bool = False       # NEW
+    ai_test_command:          str  = ""          # NEW
+
+    # Integrations
+    webhook_url:              str  = ""
+    notify_on:                List[str] = field(default_factory=list)   # NEW
+    ci_mode:                  bool = False       # NEW
+    quality_gate:             Dict[str,Any] = field(default_factory=lambda: {  # NEW
+                                  "max_critical": 0, "min_score": 0
+                              })
+
+    # Environment
+    environment_vars:         List[Dict[str,str]] = field(default_factory=list)  # NEW
+    secret_refs:              List[Dict[str,str]] = field(default_factory=list)  # NEW
+
+    # Rules
+    custom_rules_yaml:        str  = ""

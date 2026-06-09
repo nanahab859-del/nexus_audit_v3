@@ -11,6 +11,7 @@ from core.atomic import write_json
 from core.registry import PluginRegistry
 from core.language_detection import detect_languages, is_language_supported
 from plugins.base import BaseScanner
+from plugins.generic_script_scanner import GenericScriptScanner
 
 UTC = timezone.utc
 
@@ -97,37 +98,90 @@ class Orchestrator:
                     "message": "No recognized source files found. Proceeding anyway..."
                 })
             
+            # Build file-filter from inclusions / exclusions / extensions
+            _file_filter = {
+                "inclusions":         list(settings.inclusions or []),
+                "exclusions":         list(settings.exclusions or []),
+                "enabled_extensions": list(settings.enabled_extensions or []),
+            }
+
+            # Load custom scanners from settings.ui.custom_scanners
+            custom_scanners: dict[str, GenericScriptScanner] = {}
+            for cs_name, cs_meta in ((settings.ui or {}).get("custom_scanners", {})).items():
+                custom_scanners[cs_name] = GenericScriptScanner(
+                    name=cs_name,
+                    executable=cs_meta.get("executable", ""),
+                    output_pattern=cs_meta.get("output_pattern"),
+                )
+
+            # ── Pre-flight summary ────────────────────────────────────────────
+            enabled_names  = [n for n, on in settings.scanners.items() if on]
+            disabled_names = [n for n, on in settings.scanners.items() if not on]
+            await self.bus.publish(EventType.LOG, {
+                "level": "info",
+                "message": (
+                    f"[PRE-FLIGHT] Scanners enabled ({len(enabled_names)}): "
+                    f"{', '.join(enabled_names) or 'none'}  |  "
+                    f"Disabled ({len(disabled_names)}): "
+                    f"{', '.join(disabled_names) or 'none'}"
+                )
+            })
+            await self.bus.publish(EventType.LOG, {
+                "level": "info",
+                "message": (
+                    f"[PRE-FLIGHT] Target: {settings.project_path or '(not set)'}  |  "
+                    f"Extensions: {', '.join(settings.enabled_extensions or ['.py'])}  |  "
+                    f"Detected languages: {', '.join(sorted(detected_languages)) if detected_languages else 'unknown'}"
+                )
+            })
+
             # Prepare scanner tasks, filtering by language compatibility
             scanner_tasks = []
-            
+
             for name, enabled in settings.scanners.items():
                 if not enabled:
-                    continue
-                    
-                cls = registry.get(name)
-                if cls is None:
-                    await self.bus.publish(EventType.LOG, {"level": "warning", "message": f"Scanner not found: {name}"})
-                    continue
-                
-                # Check language compatibility
-                if not is_language_supported(cls.languages, detected_languages):
                     await self.bus.publish(EventType.LOG, {
                         "level": "info",
-                        "message": f"Skipping '{name}' (supports {', '.join(cls.languages)}, target has {', '.join(sorted(detected_languages)) if detected_languages else 'unknown languages'})"
+                        "message": f"[SKIPPED] '{name}' is disabled in project settings."
                     })
                     continue
-                
-                config = settings.scanner_configs.get(name, {})
+
+                # Resolve scanner class (registered plugin or custom script)
+                if name in custom_scanners:
+                    scanner_instance = custom_scanners[name]
+                    cls = scanner_instance.__class__
+                else:
+                    cls = registry.get(name)
+                    if cls is None:
+                        await self.bus.publish(EventType.LOG, {"level": "warning", "message": f"Scanner not found: {name}"})
+                        continue
+                    scanner_instance = None  # created inside _run_single_scanner
+
+                # Check language compatibility ("*" means any)
+                scanner_langs = getattr(cls, "languages", ["*"])
+                if scanner_langs != ["*"] and not is_language_supported(scanner_langs, detected_languages):
+                    await self.bus.publish(EventType.LOG, {
+                        "level": "info",
+                        "message": f"Skipping '{name}' (supports {', '.join(scanner_langs)}, target has {', '.join(sorted(detected_languages)) if detected_languages else 'unknown languages'})"
+                    })
+                    continue
+
+                # Merge per-scanner config with file filter
+                config = dict(settings.scanner_configs.get(name, {}))
                 config["_force_rescan"] = settings.force_rescan
-                
+                config["_file_filter"]  = _file_filter
+
                 await self.bus.publish(EventType.LOG, {
                     "level": "info",
                     "message": f"Running '{name}' scanner..."
                 })
-                
+
                 # Create scanner task
                 task = asyncio.create_task(
-                    self._run_single_scanner(cls, working_path, config, name)
+                    self._run_single_scanner(
+                        cls, working_path, config, name,
+                        instance=scanner_instance,
+                    )
                 )
                 scanner_tasks.append((name, task))
             
@@ -195,11 +249,14 @@ class Orchestrator:
                 "metadata": {
                     "job_id": job.id,
                     "project_path": str(job.project_path),
+                    "project_name": settings.project_name or "",
+                    "project_version": settings.project_version or "",
                     "started_at": job.started_at.isoformat(),
                     "finished_at": datetime.now(UTC).isoformat(),
                     "total_findings": len(scanner_findings),
                     "total_violations": len([f for f in scanner_findings if f.category.value == "architecture"]),
-                    "git_context": job.git_context or {}
+                    "git_context": job.git_context or {},
+                    "custom_metadata": settings.custom_metadata or [],
                 },
                 "findings": [finding_to_dict(f) for f in scanner_findings],
                 "scan_results": [
@@ -253,6 +310,27 @@ class Orchestrator:
             job.state = "completed"
             job.finished_at = datetime.now(UTC)
             await self.bus.publish(EventType.STATUS, {"state": "completed", "job_id": job.id})
+
+            # Fire webhook if configured
+            if settings.webhook_url:
+                try:
+                    import aiohttp
+                    payload = {
+                        "event":          "audit_complete",
+                        "job_id":         job.id,
+                        "project_path":   str(job.project_path),
+                        "total_findings": len(scanner_findings),
+                        "state":          "completed",
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        await session.post(
+                            settings.webhook_url,
+                            json=payload,
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        )
+                    await self.bus.publish(EventType.LOG, {"level": "info", "message": "Webhook notification sent"})
+                except Exception as wh_err:
+                    await self.bus.publish(EventType.LOG, {"level": "warning", "message": f"Webhook failed: {wh_err}"})
             
         except Exception as e:
             await self.bus.publish(EventType.LOG, {"level": "error", "message": f"Audit failed: {str(e)}"})
@@ -261,54 +339,57 @@ class Orchestrator:
             await self.bus.publish(EventType.STATUS, {"state": "failed", "job_id": job.id})
             raise
     
-    async def _run_single_scanner(self, scanner_cls: type[BaseScanner], target: Path, config: dict, name: str) -> list[Finding]:
+    async def _run_single_scanner(
+        self,
+        scanner_cls: type[BaseScanner],
+        target: Path,
+        config: dict,
+        name: str,
+        instance: Optional[BaseScanner] = None,
+    ) -> list[Finding]:
         """
-        Run a single scanner with timeout and error handling
+        Run a single scanner with timeout and error handling.
+        If `instance` is provided (custom scanner), use it directly;
+        otherwise instantiate scanner_cls().
         """
         try:
-            scanner_instance = scanner_cls()
-            
-            # Update progress
+            scanner = instance if instance is not None else scanner_cls()
+
             await self.bus.publish(EventType.PROGRESS, {
-                "scanner": name,
-                "percent": 10,
-                "file": str(target)
+                "scanner": name, "percent": 10, "file": str(target)
             })
-            
             await self.bus.publish(EventType.LOG, {
                 "level": "debug",
                 "message": f"[SCANNER DEBUG] '{name}' starting scan of {target}..."
             })
-            
-            # Run scanner with timeout
+
             findings = await asyncio.wait_for(
-                scanner_instance.scan(target, config, self.bus),
-                timeout=scanner_cls.timeout
+                scanner.scan(target, config, self.bus),
+                timeout=scanner_cls.timeout,
             )
-            
+
             await self.bus.publish(EventType.LOG, {
                 "level": "debug",
                 "message": f"[SCANNER DEBUG] '{name}' returned {len(findings) if findings else 0} findings"
             })
-            
-            # Complete progress
             await self.bus.publish(EventType.PROGRESS, {
-                "scanner": name,
-                "percent": 100,
-                "file": str(target)
+                "scanner": name, "percent": 100, "file": str(target)
             })
-            
+
             return findings if findings else []
-        except asyncio.TimeoutError:
+
+        except asyncio.TimeoutError as exc:
+            msg = f"Scanner '{name}' timed out after {scanner_cls.timeout}s"
             await self.bus.publish(EventType.LOG, {
                 "level": "error",
-                "message": f"[SCANNER DEBUG] Scanner '{name}' timed out after {scanner_cls.timeout}s"
+                "message": f"[SCANNER ERROR] {msg}"
             })
-            return []
-        except Exception as e:
+            raise TimeoutError(msg) from exc
+        except Exception as exc:
+            msg = f"Scanner '{name}' error: {str(exc)}"
             await self.bus.publish(EventType.LOG, {
                 "level": "error",
-                "message": f"[SCANNER DEBUG] Scanner '{name}' error: {str(e)}"
+                "message": f"[SCANNER ERROR] {msg}"
             })
-            return []
+            raise RuntimeError(msg) from exc
 

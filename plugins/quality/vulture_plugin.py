@@ -26,95 +26,116 @@ class VultureScanner(BaseScanner):
     ) -> List[Finding]:
         """
         Run Vulture dead code detector on Python files.
-        
-        Handles:
-        - Virtual environment detection
-        - Missing tool errors (logged, not raised)
-        - File filtering via config["_file_filter"]
-        - Force rescan via config["_force_rescan"]
+
+        Reads from config:
+          - config["strictness"]       → "Low"|"Medium"|"High"
+                                         maps to --min-confidence 40 / 60 / 80
+          - config["exclude_paths"]    → list[str] or comma-str of globs to exclude
+          - config["skip_checks"]      → list[str] of check IDs to skip in output
+          - config["_force_rescan"]    → bool (unused by vulture itself)
         """
         findings = []
-        
+
         try:
-            # Step 1: Find the tool command
             await bus.publish_log("info", "Locating vulture tool...")
             tool_cmd = find_tool_command("vulture")
             await bus.publish_log("info", f"Using: {tool_cmd}")
-            
-            # Step 2: Prepare environment (add venv bin to PATH if available)
+
+            # Prepare environment
             env = os.environ.copy()
             venv_python = _get_venv_python()
             if venv_python:
                 bin_dir = venv_python.parent
                 env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-            
-            # Step 3: Build command
+
+            # ── Config-driven exclusions ─────────────────────────────────
+            base_excludes = [".venv", "venv", ".env", "node_modules", "__pycache__",
+                             "build", "dist", "*.egg-info"]
+            extra_excludes = config.get("exclude_paths", [])
+            if isinstance(extra_excludes, str):
+                extra_excludes = [p.strip() for p in extra_excludes.split(",") if p.strip()]
+            all_excludes = base_excludes + list(extra_excludes)
+            exclude_str = ",".join(all_excludes)
+
+            # ── Strictness → --min-confidence ───────────────────────────
+            strictness = str(config.get("strictness", "Medium")).capitalize()
+            min_confidence = {
+                "Low":    "40",
+                "Medium": "60",
+                "High":   "80",
+            }.get(strictness, "60")
+
+            # ── Skip check IDs (post-filter on finding descriptions) ─────
+            skip_checks = config.get("skip_checks", [])
+            if isinstance(skip_checks, str):
+                skip_checks = [s.strip() for s in skip_checks.split(",") if s.strip()]
+            skip_set = set(skip_checks)
+
+            # Build command
             cmd = [
                 tool_cmd, str(target),
-                "--exclude", ".venv,venv,.env,node_modules,__pycache__,build,dist,*.egg-info"
+                "--exclude", exclude_str,
+                "--min-confidence", min_confidence,
             ]
-            
-            # Step 4: Run with asyncio (non-blocking)
+
             await bus.publish_progress(self.name, 10, str(target))
-            
+
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env=env
+                    env=env,
                 )
-                
-                # Wait for completion with timeout
+
                 stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(),
-                    timeout=self.timeout
+                    proc.communicate(), timeout=self.timeout
                 )
-                
-                # Step 5: Parse output
+
                 if stdout:
-                    pattern = r'^(.+?):(\d+):\s+(.+?)\s+\((\d+)%\s+confidence\)'
-                    for line in stdout.decode('utf-8').strip().split('\n'):
+                    pattern = r"^(.+?):(\d+):\s+(.+?)\s+\((\d+)%\s+confidence\)"
+                    for line in stdout.decode("utf-8").strip().split("\n"):
                         if not line.strip():
                             continue
                         match = re.match(pattern, line)
-                        if match:
-                            filename, lineno, message, confidence = match.groups()
-                            finding_id = hashlib.sha256(
-                                f"{filename}{lineno}{message}".encode()
-                            ).hexdigest()[:16]
-                            
-                            finding = Finding(
-                                id=finding_id,
-                                scanner=self.name,
-                                file=filename,
-                                line=int(lineno),
-                                column=0,
-                                severity=Severity.LOW,
-                                category=Category.QUALITY,
-                                title="Dead code detected",
-                                description=message,
-                                suggestion="Remove unused code or implement functionality",
-                                persistence=Persistence.NEW,
-                                fix_status=FixStatus.OPEN
-                            )
-                            findings.append(finding)
-                
+                        if not match:
+                            continue
+                        filename, lineno, message, confidence = match.groups()
+
+                        # Skip user-requested check IDs
+                        if any(skip in message for skip in skip_set):
+                            continue
+
+                        finding_id = hashlib.sha256(
+                            f"{filename}{lineno}{message}".encode()
+                        ).hexdigest()[:16]
+
+                        findings.append(Finding(
+                            id=finding_id,
+                            scanner=self.name,
+                            file=filename,
+                            line=int(lineno),
+                            column=0,
+                            severity=Severity.LOW,
+                            category=Category.QUALITY,
+                            title="Dead code detected",
+                            description=message,
+                            suggestion="Remove unused code or implement functionality",
+                            persistence=Persistence.NEW,
+                            fix_status=FixStatus.OPEN,
+                        ))
+
                 await bus.publish_progress(self.name, 100, str(target))
                 await bus.publish_log("info", f"Vulture found {len(findings)} issues")
-                
+
             except asyncio.TimeoutError:
                 await bus.publish_log("error", f"Vulture scan timed out after {self.timeout}s")
             except Exception as e:
-                await bus.publish_log("error", f"Vulture scan error: {str(e)}")
-        
+                await bus.publish_log("error", f"Vulture scan error: {e}")
+
         except FileNotFoundError as e:
-            # Tool not installed — log warning, don't crash
-            await bus.publish_log(
-                "warning",
-                f"Vulture not available: {str(e)}"
-            )
+            await bus.publish_log("warning", f"Vulture not available: {e}")
         except Exception as e:
-            await bus.publish_log("error", f"Vulture scanner error: {str(e)}")
-        
+            await bus.publish_log("error", f"Vulture scanner error: {e}")
+
         return findings
