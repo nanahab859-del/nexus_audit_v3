@@ -26,7 +26,7 @@ ALLOWED_SETTINGS_KEYS = {
     # AI Agent
     "ai_remediation_level", "ai_verify_with_tests", "ai_test_command",
     # Integrations
-    "webhook_url", "notify_on", "ci_mode", "quality_gate",
+    "webhook_url", "notify_on", "ci_mode", "quality_gate", "editor_url_scheme",
     # Environment
     "environment_vars", "secret_refs",
     # Rules

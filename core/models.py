@@ -145,6 +145,7 @@ class Settings:
     webhook_url:              str  = ""
     notify_on:                List[str] = field(default_factory=list)   # NEW
     ci_mode:                  bool = False       # NEW
+    editor_url_scheme:        str  = ""          # NEW
     quality_gate:             Dict[str,Any] = field(default_factory=lambda: {  # NEW
                                   "max_critical": 0, "min_score": 0
                               })

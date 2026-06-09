@@ -13,6 +13,7 @@ the api_key and ai_provider from Settings.
 
 from aiohttp import web
 from core.settings import SettingsManager
+from core.security import decrypt, is_encrypted
 
 STUB_ADVICE: dict[str, str] = {
     "vulture":  "Vulture did not find a valid Python interpreter. Make sure vulture is installed in the project virtual environment: `pip install vulture`.",
@@ -64,10 +65,29 @@ async def diagnose_scanner_error(request: web.Request) -> web.Response:
     if not scanner_name or not error_message:
         return web.json_response({"error": "scanner_name and error_message are required"}, status=400)
 
-    # ── Stub: return canned advice until the AI provider is wired ──────────
-    # TODO: replace this block with a real AI provider call once
-    #       settings.api_key / settings.ai_provider are fully implemented.
-    analysis = STUB_ADVICE.get(scanner_name, GENERIC_ADVICE)
+    raw_key = settings.api_key or ""
+    api_key = decrypt(raw_key) if is_encrypted(raw_key) else raw_key
+
+    context = "\n".join(body.get("context_logs", []))[-2000:]
+    prompt = f"Analyze the following scanner error and provide a concise, plain-text diagnostic summary and suggested fix:\nScanner: {scanner_name}\nError: {error_message}\nContext:\n{context}"
+
+    provider = settings.ai_provider
+    model = settings.ai_model
+    endpoint = settings.ai_custom_endpoint
+
+    try:
+        if provider == "claude":
+            analysis = await _gen_claude(api_key, model, prompt)
+        elif provider == "gemini":
+            analysis = await _gen_gemini(api_key, model, prompt)
+        elif provider == "ollama":
+            analysis = await _gen_ollama(endpoint or "http://localhost:11434", settings.ai_local_model or model, prompt)
+        elif provider == "custom":
+            analysis = await _gen_custom(endpoint, api_key, prompt)
+        else:
+            analysis = STUB_ADVICE.get(scanner_name, GENERIC_ADVICE)
+    except Exception as e:
+        analysis = f"AI diagnostic failed: {str(e)}"
 
     return web.json_response({"analysis": analysis})
 
@@ -216,4 +236,57 @@ async def _test_custom(endpoint: str, api_key: str) -> dict:
                 return {"success": resp.status < 500}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+# ── Generative functions ──────────────────────────────────────────────────────
+
+async def _gen_claude(api_key: str, model: str, prompt: str) -> str:
+    import aiohttp
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    payload = {
+        "model": model or "claude-haiku-4-3",
+        "max_tokens": 500,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    async with aiohttp.ClientSession() as s:
+        async with s.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            data = await resp.json()
+            if resp.status == 200:
+                return data.get("content", [{"text": "No content"}])[0].get("text", "No content")
+            return f"Error HTTP {resp.status}: {data.get('error', {}).get('message', 'Unknown')}"
+
+async def _gen_gemini(api_key: str, model: str, prompt: str) -> str:
+    import aiohttp
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model or 'gemini-2.0-flash'}:generateContent?key={api_key}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    async with aiohttp.ClientSession() as s:
+        async with s.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            data = await resp.json()
+            if resp.status == 200:
+                return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{"text": "No content"}])[0].get("text", "No content")
+            return f"Error HTTP {resp.status}: {data.get('error', {}).get('message', 'Unknown')}"
+
+async def _gen_ollama(endpoint: str, model: str, prompt: str) -> str:
+    import aiohttp
+    payload = {"model": model or "llama3:latest", "prompt": prompt, "stream": False}
+    async with aiohttp.ClientSession() as s:
+        async with s.post(f"{endpoint}/api/generate", json=payload, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("response", "No response")
+            return f"Ollama HTTP {resp.status}"
+
+async def _gen_custom(endpoint: str, api_key: str, prompt: str) -> str:
+    import aiohttp
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"} if api_key else {"Content-Type": "application/json"}
+    payload = {"model": "custom", "messages": [{"role": "user", "content": prompt}]}
+    async with aiohttp.ClientSession() as s:
+        async with s.post(endpoint, headers=headers, json=payload, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("choices", [{}])[0].get("message", {}).get("content", str(data))
+            return f"Custom HTTP {resp.status}"
 

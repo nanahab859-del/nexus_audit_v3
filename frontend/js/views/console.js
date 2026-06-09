@@ -50,7 +50,6 @@ export function initConsole() {
   _loadPrefs();
   _build();
   _wireStore();
-  _registerGlobalHotkey();
   // Start hidden; the Run button / hotkey reveals it
   _setVisible(false);
 }
@@ -58,6 +57,7 @@ export function initConsole() {
 export function showConsole() { _setVisible(true); }
 export function hideConsole() { _setVisible(false); }
 export function toggleConsole() { _setVisible(!_visible); }
+export function focusConsole() { if (_pane) _pane.focus(); }
 
 // ── Build DOM ─────────────────────────────────────────────────────────────────
 function _build() {
@@ -486,24 +486,7 @@ function _copyLogs() {
 }
 
 // ── Global hotkey ─────────────────────────────────────────────────────────────
-function _registerGlobalHotkey() {
-  document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
-      e.preventDefault();
-      if (!_visible) {
-        _setVisible(true);
-        _pane?.focus();
-      } else if (_minimized) {
-        _toggleMinimized();
-        _pane?.focus();
-      } else if (document.activeElement !== _pane) {
-        _pane?.focus();
-      } else {
-        _setVisible(false);
-      }
-    }
-  });
-}
+// Moved to main.js per spec
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 function _savePrefs() {

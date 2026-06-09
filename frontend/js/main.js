@@ -7,7 +7,7 @@ import { initDashboard } from './views/dashboard.js';
 import { initIssues } from './views/issues.js';
 import { initPlaceholderViews } from './views/placeholder.js';
 import { initSettings } from './views/settings.js';
-import { initConsole, showConsole, _applyConsolePrefs } from './views/console.js';
+import { initConsole, showConsole, hideConsole, toggleConsole, focusConsole, _applyConsolePrefs } from './views/console.js';
 
 async function init() {
   console.log('[INIT] Starting application initialization...');
@@ -41,6 +41,28 @@ async function init() {
     const lines = store.get('logLines') || [];
     const text = lines.map(l => `${new Date(l.time).toTimeString().slice(0,8)} ${l.message}`).join('\n');
     navigator.clipboard.writeText(text).catch(() => {});
+  });
+
+  // Global hotkey for Audit Console (Ctrl+Shift+A)
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toUpperCase() === 'A') {
+      e.preventDefault();
+      const el = document.getElementById('audit-console');
+      const pane = document.getElementById('con-pane');
+      if (!el || el.style.display === 'none') {
+        showConsole();
+        focusConsole();
+      } else if (el.classList.contains('is-minimized')) {
+        // Un-minimize and focus
+        el.classList.remove('is-minimized');
+        document.getElementById('con-min').textContent = '▂';
+        focusConsole();
+      } else if (document.activeElement !== pane) {
+        focusConsole();
+      } else {
+        hideConsole();
+      }
+    }
   });
 
   // 4. Wire settings button

@@ -166,6 +166,7 @@ function _render() {
         ${_s.ci_mode ? 'checked':''}>
       CI/CD mode — fail build on critical issues
     </label>
+    ${_field('Editor URL Scheme', _input('editor_url_scheme', _s.editor_url_scheme, 'vscode://file/{path}:{line}'))}
     <div class="pv-collapsible">
       <button class="pv-collapse-btn" id="pv-quality-gate-toggle">
         Quality Gate <span class="pv-arrow">▼</span>
