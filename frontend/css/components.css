@@ -1317,3 +1317,31 @@
 }
 
 
+
+/* ── Floating Action Button (when console is closed) ────────────────── */
+.con-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--console-primary-bg);
+  border: 1px solid var(--border-default);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 199;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, background 0.2s, border-color 0.2s;
+}
+.con-fab:hover {
+  transform: scale(1.05) translateY(-2px);
+  background: var(--bg-elevated);
+  border-color: var(--accent-primary);
+}
+.con-fab.hidden {
+  display: none;
+}

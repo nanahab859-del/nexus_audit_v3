@@ -85,6 +85,14 @@ function _build() {
   document.body.appendChild(_el);
   _pane = _el.querySelector('#con-pane');
 
+  const fab = document.createElement('button');
+  fab.id = 'con-fab';
+  fab.className = 'con-fab hidden';
+  fab.title = 'Open Audit Console (Ctrl+Shift+A)';
+  fab.innerHTML = '📝';
+  document.body.appendChild(fab);
+  fab.addEventListener('click', () => showConsole());
+
   _wireDrag();
   _wirePaneKeys();
   _el.querySelector('#con-copy').addEventListener('click',  _copyLogs);
@@ -459,6 +467,8 @@ function _toggleMinimized() {
 function _setVisible(v) {
   _visible = v;
   _el.style.display = v ? 'flex' : 'none';
+  const fab = document.getElementById('con-fab');
+  if (fab) fab.classList.toggle('hidden', v);
   if (v && _minimized) {
     _minimized = false;
     _el.classList.remove('is-minimized');
