@@ -52,6 +52,12 @@ def create_app(argv=None) -> web.Application:
     app.router.add_get('/api/ai/ollama/models',   routes_ai.get_ollama_models)
 
     app.router.add_post('/api/scanners/custom',    routes_config.register_custom_scanner)
+    app.router.add_delete('/api/scanners/custom/{name}', routes_config.delete_custom_scanner)
+
+    # VEX suppression routes
+    app.router.add_get('/api/vex',            routes_config.get_vex)
+    app.router.add_delete('/api/vex',         routes_config.delete_vex)
+    app.router.add_post('/api/vex/upload',    routes_config.upload_vex)
 
     # Static asset directories (CSS, JS, assets)
     app.router.add_static('/static/css',    FRONTEND_DIR / 'css')

@@ -68,11 +68,21 @@ async def diagnose_scanner_error(request: web.Request) -> web.Response:
     raw_key = settings.api_key or ""
     api_key = decrypt(raw_key) if is_encrypted(raw_key) else raw_key
 
+    # If no API key is configured, fall back to canned stub advice rather than
+    # making a real call that will fail with 401.
+    if not api_key or api_key == "***":
+        analysis = STUB_ADVICE.get(scanner_name, GENERIC_ADVICE)
+        return web.json_response({"analysis": analysis})
+
     context = "\n".join(body.get("context_logs", []))[-2000:]
-    prompt = f"Analyze the following scanner error and provide a concise, plain-text diagnostic summary and suggested fix:\nScanner: {scanner_name}\nError: {error_message}\nContext:\n{context}"
+    prompt = (
+        f"Analyze the following scanner error and provide a concise, plain-text "
+        f"diagnostic summary and suggested fix:\n"
+        f"Scanner: {scanner_name}\nError: {error_message}\nContext:\n{context}"
+    )
 
     provider = settings.ai_provider
-    model = settings.ai_model
+    model    = settings.ai_model
     endpoint = settings.ai_custom_endpoint
 
     try:

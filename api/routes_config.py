@@ -396,3 +396,87 @@ async def register_custom_scanner(request: web.Request) -> web.Response:
     }
     await sm.save()
     return web.json_response({"status": "registered", "name": name})
+
+
+async def delete_custom_scanner(request: web.Request) -> web.Response:
+    """
+    DELETE /api/scanners/custom/{name}
+    Remove a custom scanner registration from settings.ui.custom_scanners.
+    """
+    name = request.match_info.get("name", "").strip()
+    if not name:
+        return web.json_response({"error": "name is required"}, status=400)
+
+    sm = SettingsManager()
+    settings = await sm.load()
+    custom = (settings.ui or {}).get("custom_scanners", {})
+    if name not in custom:
+        return web.json_response({"error": f"Custom scanner '{name}' not found"}, status=404)
+
+    del custom[name]
+    if isinstance(settings.ui, dict):
+        settings.ui["custom_scanners"] = custom
+    await sm.save()
+    return web.json_response({"status": "deleted", "name": name})
+
+
+# ── /api/vex ─────────────────────────────────────────────────────────────────
+
+async def get_vex(request: web.Request) -> web.Response:
+    """GET /api/vex — Return current VEX suppressions from settings."""
+    sm = SettingsManager()
+    settings = await sm.load()
+    vex = (settings.ui or {}).get("vex_suppressions", [])
+    return web.json_response({"suppressions": vex})
+
+
+async def delete_vex(request: web.Request) -> web.Response:
+    """DELETE /api/vex — Clear all VEX suppressions."""
+    sm = SettingsManager()
+    settings = await sm.load()
+    if isinstance(settings.ui, dict):
+        settings.ui["vex_suppressions"] = []
+    await sm.save()
+    return web.json_response({"status": "cleared"})
+
+
+async def upload_vex(request: web.Request) -> web.Response:
+    """
+    POST /api/vex/upload — Upload a VEX file (JSON or CycloneDX-VEX format).
+    Parses suppression entries and merges them into settings.ui.vex_suppressions.
+    """
+    try:
+        reader = await request.multipart()
+        field = await reader.next()
+        if field is None:
+            return web.json_response({"error": "No file uploaded"}, status=400)
+        raw = await field.read(decode=True)
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as e:
+        return web.json_response({"error": f"Invalid JSON in VEX file: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"error": f"Upload failed: {e}"}, status=400)
+
+    # Accept CycloneDX VEX: {"vulnerabilities": [...]} or plain [...]
+    entries = []
+    if isinstance(data, list):
+        entries = data
+    elif isinstance(data, dict):
+        entries = data.get("vulnerabilities", data.get("suppressions", []))
+
+    sm = SettingsManager()
+    settings = await sm.load()
+    if not isinstance(settings.ui, dict):
+        settings.ui = {}
+    existing = settings.ui.get("vex_suppressions", [])
+    # De-duplicate by ID if present
+    existing_ids = {e.get("id") for e in existing if isinstance(e, dict) and e.get("id")}
+    new_entries = [e for e in entries if not (isinstance(e, dict) and e.get("id") in existing_ids)]
+    settings.ui["vex_suppressions"] = existing + new_entries
+    await sm.save()
+    return web.json_response({
+        "status": "imported",
+        "added": len(new_entries),
+        "total": len(settings.ui["vex_suppressions"]),
+    })
+
