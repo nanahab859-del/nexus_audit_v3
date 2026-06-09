@@ -155,3 +155,22 @@ class Settings:
 
     # Rules
     custom_rules_yaml:        str  = ""
+
+    # AI Extended Settings
+    ai_temperature:        float = 0.7
+    ai_max_tokens:         int   = 4096
+    ai_timeout:            int   = 120
+    ai_retry_enabled:      bool  = True
+    ai_max_retries:        int   = 3
+    ai_custom_endpoint:    str   = ""
+    ai_api_version:        str   = ""
+    ai_org_id:             str   = ""
+    ai_local_model:        str   = "llama3:latest"
+    ai_key_pool:           List[str] = field(default_factory=list)
+    ai_smart_routing:      bool  = False
+    ai_fallback_model:     str   = ""
+    ai_budget_cap:         float = 0.0
+    ai_data_scrubber:      bool  = True
+    ai_prompt_shield:      bool  = True
+    ai_multimodal_enabled: bool  = False
+    ai_context_limit:      int   = 128000

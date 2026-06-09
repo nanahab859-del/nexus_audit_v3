@@ -98,6 +98,22 @@ function _render() {
     }
   }
 
+  // Mount the self-contained AI view
+  if (_activeTab === 'ai') {
+    const mount = el.querySelector('#ai-view-mount');
+    if (mount) {
+      import('./ai.js').then(m => {
+        m.mountAI(mount, _settings, async (updated) => {
+          await api.updateSettings(updated);
+          const fresh = await api.getSettings();
+          store.set('settings', fresh);
+          _settings = { ...fresh };
+          _showMsg('success', '✓ Saved');
+        });
+      });
+    }
+  }
+
   // Wire scanner expand/collapse toggles
   el.querySelectorAll('.scanner-expand-btn').forEach(b => {
     b.addEventListener('click', () => {
@@ -205,80 +221,7 @@ function _tabScanners() {
 
 
 function _tabAI() {
-  const s = _settings;
-  const ai = s.ai_enabled || false;
-  const html = `
-    <div class="cfg-section-header">
-      <h2>AI Configuration</h2>
-      <p>AI-powered recommendations require an API key. The AI referee analyses findings and suggests exact code fixes.</p>
-    </div>
-    <div class="cfg-card" style="max-width:560px; margin:0 auto">
-      <div class="cfg-card__head">
-        <span class="cfg-card__icon">🤖</span>
-        <span class="cfg-card__title">AI Fix Engine</span>
-      </div>
-      <div class="cfg-card__body">
-        <!-- Enable toggle row using scanner-style switch -->
-        <div class="ai-toggle-row">
-          <div>
-            <div style="font-size:var(--text-sm); font-weight:600">Enable AI</div>
-            <div style="font-size:var(--text-xs); color:var(--text-muted)">Generate AI fix recommendations after each scan</div>
-          </div>
-          <label class="scanner-toggle" style="flex-shrink:0">
-            <input type="checkbox" class="scanner-toggle-input" id="s-ai-enabled" ${ai ? 'checked' : ''}>
-            <span class="scanner-toggle__track"></span>
-          </label>
-        </div>
-        <!-- Fields section — dims when AI disabled -->
-        <div id="ai-fields-section" class="${!ai ? 'ai-fields--disabled' : ''}">
-          <div class="form-field">
-            <label class="form-label">Provider</label>
-            <select class="form-input" id="s-ai-provider" ${!ai ? 'disabled' : ''}>
-              <option value="claude"  ${s.ai_provider==='claude'  ? 'selected':''}>Claude (Anthropic)</option>
-              <option value="gemini" ${s.ai_provider==='gemini'  ? 'selected':''}>Gemini (Google)</option>
-              <option value="openai" ${s.ai_provider==='openai'  ? 'selected':''}>GPT-4 (OpenAI)</option>
-            </select>
-          </div>
-          <div class="form-field">
-            <label class="form-label">Model</label>
-            <input class="form-input" id="s-ai-model" type="text"
-                   value="${esc(s.ai_model||'')}" ${!ai ? 'disabled' : ''}
-                   placeholder="claude-3-5-sonnet, gemini-2.0-flash, gpt-4o…">
-          </div>
-          <div class="form-field">
-            <label class="form-label">API Key</label>
-            <div class="input-with-btn">
-              <input class="form-input" id="s-api-key" type="password"
-                     placeholder="${s.api_key ? '••••••••' : 'Enter API key'}" ${!ai ? 'disabled' : ''}>
-              <button class="btn-secondary-sm" id="btn-toggle-apikey" type="button" title="Show/hide key">👁</button>
-            </div>
-            <span class="form-hint">Leave blank to keep existing key.</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Wire live AI toggle
-  setTimeout(() => {
-    const el = document.getElementById('view-settings');
-    el?.querySelector('#s-ai-enabled')?.addEventListener('change', function() {
-      const on = this.checked;
-      const section = el.querySelector('#ai-fields-section');
-      section?.classList.toggle('ai-fields--disabled', !on);
-      ['s-ai-provider', 's-ai-model', 's-api-key'].forEach(id => {
-        const f = el.querySelector('#' + id);
-        if (f) f.disabled = !on;
-      });
-    });
-    // Eye toggle for API key
-    el?.querySelector('#btn-toggle-apikey')?.addEventListener('click', () => {
-      const inp = el.querySelector('#s-api-key');
-      if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
-    });
-  }, 0);
-
-  return html;
+  return '<div id="ai-view-mount"></div>';
 }
 
 // ── Rules tab ─────────────────────────────────────────────
@@ -358,13 +301,7 @@ async function _save() {
 
   const g = id => el?.querySelector('#' + id);
 
-  // Note: Project tab is handled by project.js which has its own save callback.
-  // AI tab fields
-  if (g('s-ai-enabled')) p.ai_enabled  = g('s-ai-enabled').checked;
-  if (g('s-ai-provider'))p.ai_provider = g('s-ai-provider')?.value || p.ai_provider;
-  if (g('s-ai-model'))   p.ai_model    = g('s-ai-model')?.value    || p.ai_model;
-  // Only send api_key if user actually typed something
-  if (g('s-api-key') && g('s-api-key').value) p.api_key = g('s-api-key').value;
+  // AI tab fields are now saved natively by ai.js
 
   // Rules tab
   if (g('s-custom-rules')) p.custom_rules_yaml = g('s-custom-rules').value;

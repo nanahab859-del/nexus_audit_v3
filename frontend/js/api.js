@@ -170,3 +170,19 @@ export function validateRemote(url, branch, auth_type, token_env) {
     body: JSON.stringify({ url, branch, auth_type, token_env }),
   });
 }
+
+export function testAI(provider, model, api_key, endpoint) {
+  return _fetch('/api/ai/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, api_key, endpoint }),
+  });
+}
+
+export function getAIUsage() {
+  return _fetch('/api/ai/usage');
+}
+
+export function getOllamaModels() {
+  return _fetch('/api/ai/ollama/models');
+}

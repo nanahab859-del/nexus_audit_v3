@@ -31,6 +31,12 @@ ALLOWED_SETTINGS_KEYS = {
     "environment_vars", "secret_refs",
     # Rules
     "custom_rules_yaml",
+    # AI Extended
+    "ai_temperature", "ai_max_tokens", "ai_timeout", "ai_retry_enabled",
+    "ai_max_retries", "ai_custom_endpoint", "ai_api_version", "ai_org_id",
+    "ai_local_model", "ai_key_pool", "ai_smart_routing", "ai_fallback_model",
+    "ai_budget_cap", "ai_data_scrubber", "ai_prompt_shield",
+    "ai_multimodal_enabled", "ai_context_limit",
 }
 
 _REDACTED = "***"

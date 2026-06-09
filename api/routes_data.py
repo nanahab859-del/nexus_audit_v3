@@ -42,7 +42,6 @@ async def get_data(request: web.Request) -> web.Response:
 
 
 async def get_capabilities(request: web.Request) -> web.Response:
-    """Return static capabilities so the frontend doesn't need hardcoded lists."""
     from core.models import Category, Severity
     return web.json_response({
         "stacks": [
@@ -54,6 +53,48 @@ async def get_capabilities(request: web.Request) -> web.Response:
         "scanner_categories": [c.value for c in Category],
         "version": APP_VERSION,
         "server_url": request.host,
+        "ai_providers": [
+            {
+                "id": "claude",
+                "name": "Claude",
+                "requires_key": True,
+                "default_model": "claude-opus-4-7",
+                "max_tokens_limit": 200000,
+                "models": [
+                    {"id": "claude-opus-4-7",    "name": "Claude Opus 4.7",    "multimodal": True},
+                    {"id": "claude-sonnet-4-5",  "name": "Claude Sonnet 4.5",  "multimodal": True},
+                    {"id": "claude-haiku-4-3",   "name": "Claude Haiku 4.3",   "multimodal": False},
+                ]
+            },
+            {
+                "id": "gemini",
+                "name": "Gemini",
+                "requires_key": True,
+                "default_model": "gemini-2.5-pro",
+                "max_tokens_limit": 128000,
+                "models": [
+                    {"id": "gemini-2.5-pro",     "name": "Gemini 2.5 Pro",     "multimodal": True},
+                    {"id": "gemini-2.5-flash",   "name": "Gemini 2.5 Flash",   "multimodal": True},
+                    {"id": "gemini-2.0-flash",   "name": "Gemini 2.0 Flash",   "multimodal": True},
+                ]
+            },
+            {
+                "id": "ollama",
+                "name": "Ollama (Local)",
+                "requires_key": False,
+                "default_model": "llama3:latest",
+                "max_tokens_limit": 4096,
+                "models": []   # fetched dynamically from Ollama API
+            },
+            {
+                "id": "custom",
+                "name": "Custom Endpoint",
+                "requires_key": False,
+                "default_model": "",
+                "max_tokens_limit": 128000,
+                "models": []
+            }
+        ]
     })
 
 

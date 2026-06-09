@@ -47,6 +47,9 @@ def create_app(argv=None) -> web.Application:
     app.router.add_post('/api/scanners/install',   routes_config.install_scanner)
     # AI diagnostic routes
     app.router.add_post('/api/ai/diagnose-scanner-error', routes_ai.diagnose_scanner_error)
+    app.router.add_post('/api/ai/test',           routes_ai.test_connection)
+    app.router.add_get('/api/ai/usage',           routes_ai.get_usage)
+    app.router.add_get('/api/ai/ollama/models',   routes_ai.get_ollama_models)
 
     app.router.add_post('/api/scanners/custom',    routes_config.register_custom_scanner)
 
