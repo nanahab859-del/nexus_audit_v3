@@ -15,3 +15,6 @@ audit_history/
 .pytest_cache/
 .venv/
 venv/
+lod/audit_data_complete.json
+*.json
+*.json
