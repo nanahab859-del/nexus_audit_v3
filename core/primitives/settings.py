@@ -188,7 +188,11 @@ class SettingsManager:
         
         deep_merge(settings_dict, updates)
         
-        new_settings = ProjectSettings(**settings_dict)
+        # Filter keys that are not in ProjectSettings fields
+        allowed_keys = {f.name for f in dataclasses.fields(ProjectSettings)}
+        filtered_dict = {k: v for k, v in settings_dict.items() if k in allowed_keys}
+        
+        new_settings = ProjectSettings(**filtered_dict)
         project.settings = new_settings
         await self.save_project(project)
         return new_settings

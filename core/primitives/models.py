@@ -5,6 +5,11 @@ from datetime import datetime
 import uuid
 
 # --- 1. Enums ---
+class ConfigurationError(Exception):
+    """Raised when the merged audit configuration is invalid."""
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__("\n".join(errors))
 
 class Severity(Enum):
     INFO = 0
@@ -107,7 +112,25 @@ def create_finding(
     )
 
 def finding_to_dict(f: Finding) -> dict:
-    return to_dict(f)
+    return {
+        "id": f.id,
+        "rule_id": f.rule_id,
+        "scanner": f.scanner,
+        "file": f.file,
+        "line": f.line,
+        "column": f.column,
+        "severity": f.severity.name,
+        "category": f.category.value,
+        "title": f.title,
+        "description": f.description,
+        "snippet": f.snippet,
+        "fingerprint": f.fingerprint,
+        "suggestion": f.suggestion,
+        "cwe": f.cwe,
+        "cvss_score": f.cvss_score,
+        "persistence": f.persistence.value,
+        "fix_status": f.fix_status.value,
+    }
 
 @dataclass
 class ScanResult:
