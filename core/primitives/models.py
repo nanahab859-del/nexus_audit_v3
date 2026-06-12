@@ -2,6 +2,7 @@ from dataclasses import dataclass, field, is_dataclass, asdict
 from enum import Enum
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
+from pathlib import Path
 import uuid
 
 # --- 1. Enums ---
@@ -63,7 +64,27 @@ def to_dict(obj: Any) -> Any:
         return {k: to_dict(v) for k, v in asdict(obj).items()}
     return obj
 
-# --- 2. Core Dataclasses ---
+@dataclass
+class ModuleEntry:
+    module_path: str
+    file_path: Path
+    relative_path: str
+    app: str
+    imports: Dict[str, int]
+    defined_names: List[str]
+    is_test: bool
+    lines_of_code: int
+    language: str
+    parse_status: str
+    has_wildcard_imports: bool
+
+@dataclass
+class ProjectDNA:
+    modules: Dict[str, ModuleEntry]
+    apps: List[str]
+    physical_files: List[str]
+    built_at: datetime
+    project_root: Path
 
 @dataclass(frozen=True)
 class Finding:
@@ -183,6 +204,40 @@ class PipelineConfig:
 @dataclass
 class SuppressionPolicy:
     rules: Dict[str, List[str]] = field(default_factory=dict)
+
+@dataclass
+class ScoringConfig:
+    violation_default: float = 5.0
+    violation_hub: float = 3.0
+    security_high: float = 12.0
+    security_medium: float = 6.0
+    security_low: float = 3.0
+    complexity_above: float = 10.0
+    complexity_factor: float = 2.0
+    dead_code_per: float = 3.0
+    ghost_file_per: float = 2.0
+    exclude_tests: bool = True
+
+@dataclass
+class AppScore:
+    app: str
+    score: int
+    is_hub: bool
+    lines_of_code: int
+    finding_counts: Dict[str, int]
+    penalty_breakdown: Dict[str, float]
+
+@dataclass
+class RuleDefinition:
+    id: str
+    name: str
+    type: str
+    severity: str
+    category: str
+    languages: List[str]
+    description: str
+    suggestion: str
+    config: Dict[str, Any] = field(default_factory=dict)
 
 # --- 4. Settings ---
 
