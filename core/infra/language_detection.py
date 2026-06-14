@@ -47,3 +47,26 @@ def detect(file_path: str | Path) -> str:
     # 2. Extension match
     ext = path.suffix.lower()
     return EXTENSION_MAP.get(ext, "unknown")
+
+def detect_languages(target_path: Path, max_depth: int = 5) -> Set[str]:
+    """Detect programming languages in target directory by scanning file extensions."""
+    languages: Set[str] = set()
+    if not target_path.exists(): return languages
+    try:
+        for file_path in target_path.rglob("*"):
+            if file_path.is_file():
+                relative_path = file_path.relative_to(target_path)
+                if len(relative_path.parts) > max_depth: continue
+                if any(part.startswith(".") or part in ("node_modules", "__pycache__", "venv", ".venv", "dist", "build") 
+                       for part in relative_path.parts): continue
+                ext = file_path.suffix.lower()
+                if ext in LANGUAGE_EXTENSIONS:
+                    languages.add(LANGUAGE_EXTENSIONS[ext])
+    except (PermissionError, OSError): pass
+    return languages
+
+def is_language_supported(scanner_languages: list[str], detected_languages: Set[str]) -> bool:
+    """Check if any scanner language is supported by detected languages."""
+    if not detected_languages: return True
+    scanner_set = set(lang.lower() for lang in scanner_languages)
+    return bool(scanner_set & detected_languages)

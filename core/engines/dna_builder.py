@@ -30,14 +30,14 @@ async def build_dna(
     await bus.publish_log("info", f"Starting DNA construction for {project_root}")
     await bus.publish_progress("dna_builder", 0, "Discovering files...")
     
-    files = list(discover(project_root))
+    files = await discover(project_root)
     total_files = len(files)
     modules: Dict[str, ModuleEntry] = {}
     
     # 2. Filter files
     filtered_files = []
     for f in files:
-        file_path = Path(f.absolute)
+        file_path = f.absolute_path
         if file_path.stat().st_size > 1024 * 1024:
             continue
         if ".min." in file_path.name or file_path.suffix in [".min.js", ".min.css"]:
@@ -54,7 +54,7 @@ async def build_dna(
             continue
             
         # Determine module_path
-        rel_path = Path(f.relative)
+        rel_path = Path(f.relative_path)
         if file_path.name == "__init__.py":
             module_path = str(rel_path.parent).replace(os.sep, ".")
         else:

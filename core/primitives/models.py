@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, is_dataclass, asdict
 from enum import Enum
 from typing import List, Optional, Dict, Any, Union
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import uuid
 
@@ -51,6 +51,10 @@ class JobState(Enum):
     FAILED = "failed"
 
 # --- Serialization Helper ---
+# This helper uses dataclasses.asdict() as a starting point, then
+# recursively converts Enums to strings and handles nested dataclasses.
+# It fulfills the contract that JSON serialization must be safe (no
+# Enum objects or raw datetimes in the output).
 def to_dict(obj: Any) -> Any:
     if isinstance(obj, dict):
         return {k: to_dict(v) for k, v in obj.items()}
@@ -75,8 +79,8 @@ class ModuleEntry:
     is_test: bool
     lines_of_code: int
     language: str
-    parse_status: str
-    has_wildcard_imports: bool
+    parse_status: str = "success"
+    has_wildcard_imports: bool = False
 
 @dataclass
 class ProjectDNA:
@@ -246,7 +250,7 @@ class GlobalSettings:
     api_key: Optional[str] = None
     ai_enabled: bool = False
     ai_provider: str = "claude"
-    ai_model: str = "claude-opus-4-7"
+    ai_model: str = "claude-3-5-sonnet-20240620"
     ui_theme: str = "dark"
     active_project_id: Optional[str] = None
 
@@ -279,7 +283,7 @@ class Project:
     path: str
     settings: ProjectSettings
     job_history: List[str] = field(default_factory=list)
-    registered_at: datetime = field(default_factory=datetime.now)
+    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_audited_at: Optional[datetime] = None
 
 @dataclass

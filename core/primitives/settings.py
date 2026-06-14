@@ -1,6 +1,7 @@
 from pathlib import Path
 import asyncio
 import uuid
+import logging
 import dataclasses
 from datetime import datetime
 from typing import Optional, Dict
@@ -17,24 +18,23 @@ class SettingsManager:
     # ── Workspace ──────────────────────────────────────────────
     async def load_workspace(self) -> Workspace:
         async with self._lock:
-            data = await read_json(self._workspace_path)
+            try:
+                data = await read_json(self._workspace_path)
+            except (OSError, PermissionError) as e:
+                logging.warning(f"Cannot read workspace: {e}")
+                return Workspace()
             if not data:
                 return Workspace()
             
             # Reconstruct Workspace from dict
-            # Simple deserialization: create GlobalSettings, then projects
             gs_dict = data.get("global_settings", {})
             if gs_dict.get("api_key"):
                 gs_dict["api_key"] = decrypt(gs_dict["api_key"])
             
             global_settings = GlobalSettings(**gs_dict)
             
-            # Projects deserialization would be more complex, 
-            # here we assume simple dict-to-dataclass for now based on the spec.
-            # In a real system, you'd use a robust mapper.
             projects = {}
             for pid, pdata in data.get("projects", {}).items():
-                # Assuming Project needs to be constructed carefully
                 projects[pid] = Project(**pdata)
             
             return Workspace(projects=projects, global_settings=global_settings, active_project_id=data.get("active_project_id"))
@@ -47,7 +47,12 @@ class SettingsManager:
             if ws_dict["global_settings"].get("api_key"):
                 ws_dict["global_settings"]["api_key"] = encrypt(ws_dict["global_settings"]["api_key"])
             
-            await write_json(self._workspace_path, ws_dict, indent=4)
+            try:
+                await write_json(self._workspace_path, ws_dict, indent=4)
+            except (OSError, PermissionError) as e:
+                logging.error(f"Cannot save workspace: {e}")
+                return
+            
             # Restore plaintext (not strictly necessary but safe)
             if workspace.global_settings.api_key:
                 workspace.global_settings.api_key = decrypt(ws_dict["global_settings"]["api_key"])
@@ -127,7 +132,11 @@ class SettingsManager:
         project_dir = self._projects_dir / project.id
         project_dir.mkdir(parents=True, exist_ok=True)
         from core.primitives.models import to_dict
-        await write_json(project_dir / "project.json", to_dict(project), indent=4)
+        
+        try:
+            await write_json(project_dir / "project.json", to_dict(project), indent=4)
+        except (OSError, PermissionError) as e:
+            logging.error(f"Cannot save project: {e}")
 
     async def delete_project(self, project_id: str) -> None:
         workspace = await self.load_workspace()

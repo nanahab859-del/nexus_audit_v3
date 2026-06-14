@@ -13,22 +13,51 @@ class ToolResolver:
     def __init__(self):
         self._resolved: dict[str, Optional[List[str]]] = {}
 
-    async def is_available(self, tool_name: str) -> bool:
+    async def is_available(self, tool_name: str, ecosystem: str = "python") -> bool:
         try:
-            await self.resolve(tool_name)
+            await self.resolve(tool_name, ecosystem)
             return True
         except ToolNotFoundError:
             return False
 
-    async def resolve(self, tool_name: str) -> List[str]:
+    async def resolve(self, tool_name: str, ecosystem: str = "python") -> List[str]:
         # 1. Cache check
-        if tool_name in self._resolved:
-            cached = self._resolved[tool_name]
+        cache_key = f"{ecosystem}:{tool_name}"
+        if cache_key in self._resolved:
+            cached = self._resolved[cache_key]
             if cached is None:
-                raise ToolNotFoundError(f"{tool_name} not found. Install with: pip install {tool_name}")
+                raise ToolNotFoundError(f"{tool_name} not found in {ecosystem}.")
             return cached
 
-        # 2. Venv bin directory
+        # 2. Node ecosystem
+        if ecosystem == "node":
+            # Check local project node_modules
+            local_eslint = Path("node_modules") / ".bin" / tool_name
+            if local_eslint.is_file() and os.access(local_eslint, os.X_OK):
+                result = [str(local_eslint)]
+                self._resolved[cache_key] = result
+                return result
+            # Fallback to system
+            found = shutil.which(tool_name)
+            if found:
+                result = [found]
+                self._resolved[cache_key] = result
+                return result
+            self._resolved[cache_key] = None
+            raise ToolNotFoundError(f"{tool_name} not found in node_modules or system path.")
+
+        # 3. Binary ecosystem (System PATH only)
+        if ecosystem == "binary":
+            found = shutil.which(tool_name)
+            if found:
+                result = [found]
+                self._resolved[cache_key] = result
+                return result
+            self._resolved[cache_key] = None
+            raise ToolNotFoundError(f"{tool_name} not found in system path.")
+
+        # 4. Python ecosystem (default)
+        # Venv bin directory
         venv_python = get_venv_python()
         if venv_python:
             bin_dir = venv_python.parent
@@ -36,17 +65,17 @@ class ToolResolver:
             candidate = bin_dir / exe_name
             if candidate.is_file() and os.access(candidate, os.X_OK):
                 result = [str(candidate)]
-                self._resolved[tool_name] = result
+                self._resolved[cache_key] = result
                 return result
 
-        # 3. System PATH
+        # System PATH
         found = shutil.which(tool_name)
         if found:
             result = [found]
-            self._resolved[tool_name] = result
+            self._resolved[cache_key] = result
             return result
 
-        # 4. Python module fallback
+        # Python module fallback
         python_path = str(get_python_for_tools())
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -57,11 +86,11 @@ class ToolResolver:
             await asyncio.wait_for(proc.communicate(), timeout=5.0)
             if proc.returncode == 0:
                 result = [python_path, "-m", tool_name]
-                self._resolved[tool_name] = result
+                self._resolved[cache_key] = result
                 return result
         except (asyncio.TimeoutError, Exception):
             pass
 
-        # 5. Not found
-        self._resolved[tool_name] = None
-        raise ToolNotFoundError(f"{tool_name} not found. Install with: pip install {tool_name}")
+        # Not found
+        self._resolved[cache_key] = None
+        raise ToolNotFoundError(f"{tool_name} not found in python environment.")

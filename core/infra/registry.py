@@ -15,7 +15,7 @@ class PluginRegistry:
         self._registry: Dict[str, type] = {}
         self._loaded = False
 
-    def load(self) -> None:
+    def load(self, bus: Optional[EventBus] = None) -> None:
         if self._loaded:
             return
         
@@ -65,7 +65,16 @@ class PluginRegistry:
                             self._registry[scanner_name] = cls
                             
             except Exception as e:
-                logger.warning(f"Failed to load plugin from {file_path}: {e}")
+                msg = f"Failed to load plugin from {file_path}: {e}"
+                if bus:
+                    try:
+                        import asyncio
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(bus.publish_log("WARNING", msg))
+                    except RuntimeError:
+                        logger.warning(msg)
+                else:
+                    logger.warning(msg)
         
         self._loaded = True
         
