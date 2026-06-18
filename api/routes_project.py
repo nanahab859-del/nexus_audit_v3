@@ -95,23 +95,30 @@ async def validate_remote(request: web.Request) -> web.Response:
         return web.json_response({"reachable": False, "error": "url is required"}, status=400)
 
     env_var  = (body.get("token_env") or "").strip()
-    import os
+    import os, tempfile
     env = os.environ.copy()
+
+    cred_path = None
+    url_to_use = url
+
     if env_var and env_var in os.environ:
-        # Inject git credential helper for HTTPS with token
         token = os.environ[env_var]
-        # Embed token into URL if HTTPS
-        if url.startswith("https://") and token:
-            parts = url[len("https://"):]
-            url_with_token = f"https://oauth2:{token}@{parts}"
-        else:
-            url_with_token = url
-    else:
-        url_with_token = url
+        if token and url.startswith("https://"):
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".creds", delete=False
+            ) as cf:
+                cf.write(f"https://oauth2:{token}@{parsed.netloc}\n")
+                cred_path = cf.name
+            os.chmod(cred_path, 0o600)
+            env["GIT_CONFIG_COUNT"]   = "1"
+            env["GIT_CONFIG_KEY_0"]   = "credential.helper"
+            env["GIT_CONFIG_VALUE_0"] = f"store --file={cred_path}"
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "git", "ls-remote", "--quiet", "--exit-code", url_with_token, "HEAD",
+            "git", "ls-remote", "--quiet", "--exit-code", url_to_use, "HEAD",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -125,6 +132,9 @@ async def validate_remote(request: web.Request) -> web.Response:
         return web.json_response({"reachable": False, "error": "Connection timed out (10s)"})
     except Exception as e:
         return web.json_response({"reachable": False, "error": str(e)})
+    finally:
+        if cred_path and os.path.exists(cred_path):
+            os.unlink(cred_path)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

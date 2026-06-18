@@ -1,22 +1,32 @@
 import os
 import yaml
 import logging
+import asyncio
 from typing import Any, Optional
 from pathlib import Path
-from core.primitives.models import GlobalSettings, ProjectSettings, Severity, ConfigurationError, to_dict
+from core.primitives.models import GlobalSettings, ProjectSettings, Severity, to_dict
 from core.primitives.settings import SettingsManager
+from core.infra.utils import deep_merge
+
+
+def config_to_yaml(config: dict) -> str:
+    """Serialise a config dict to a YAML string."""
+    return yaml.dump(config, default_flow_style=False, allow_unicode=True)
+
+
+class ConfigurationError(Exception):
+    """Raised when the merged audit configuration is invalid."""
+    def __init__(self, errors: list[str]):
+        self.errors = errors
+        super().__init__("\n".join(errors))
 
 logger = logging.getLogger(__name__)
 
-def deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge override into base."""
-    result = base.copy()
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge(result[key], value)
-        else:
-            result[key] = value
-    return result
+async def _load_yaml(yaml_path: Path) -> dict:
+    def _read():
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return await asyncio.to_thread(_read)
 
 async def load_full_config(
     settings_manager: SettingsManager,
@@ -30,14 +40,14 @@ async def load_full_config(
     ps = proj.settings
 
     # Build base dict
-    config = deep_merge(to_dict(gs), to_dict(ps))
+    config = to_dict(gs).copy()
+    deep_merge(config, to_dict(ps))
 
     # 6. YAML override
     yaml_path = Path(proj.path) / ".nexus-audit.yaml"
     if yaml_path.exists():
         try:
-            with open(yaml_path, "r") as f:
-                yaml_data = yaml.safe_load(f) or {}
+            yaml_data = await _load_yaml(yaml_path)
             
             whitelist = {
                 "scanners", "scanner_configs", "ignore_paths", 
@@ -51,7 +61,7 @@ async def load_full_config(
                 else:
                     logger.warning(f"Ignored key in .nexus-audit.yaml: {k}")
             
-            config = deep_merge(config, cleaned_yaml)
+            deep_merge(config, cleaned_yaml)
         except Exception as e:
             logger.warning(f"Failed to load .nexus-audit.yaml: {e}")
 
@@ -76,11 +86,11 @@ async def load_full_config(
                     converted_value = value
             env_overrides[key] = converted_value
     
-    config = deep_merge(config, env_overrides)
+    deep_merge(config, env_overrides)
 
     # 8. Global overrides
     if global_overrides:
-        config = deep_merge(config, global_overrides)
+        deep_merge(config, global_overrides)
 
     # 9. Validate
     errors = validate_config(config)

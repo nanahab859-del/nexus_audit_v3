@@ -6,12 +6,6 @@ from pathlib import Path
 import uuid
 
 # --- 1. Enums ---
-class ConfigurationError(Exception):
-    """Raised when the merged audit configuration is invalid."""
-    def __init__(self, errors: list[str]):
-        self.errors = errors
-        super().__init__("\n".join(errors))
-
 class Severity(Enum):
     INFO = 0
     LOW = 1
@@ -61,12 +55,16 @@ def to_dict(obj: Any) -> Any:
     elif isinstance(obj, list):
         return [to_dict(v) for v in obj]
     elif isinstance(obj, Enum):
-        return obj.value
+        return obj.name
     elif isinstance(obj, datetime):
         return obj.isoformat()
+    elif isinstance(obj, Path):
+        return str(obj)
     elif is_dataclass(obj):
         return {k: to_dict(v) for k, v in asdict(obj).items()}
     return obj
+
+ImportLineMap = Dict[str, int]   # module_name -> line_number_of_import
 
 @dataclass
 class ModuleEntry:
@@ -74,12 +72,12 @@ class ModuleEntry:
     file_path: Path
     relative_path: str
     app: str
-    imports: Dict[str, int]
+    imports: ImportLineMap
     defined_names: List[str]
     is_test: bool
     lines_of_code: int
     language: str
-    parse_status: str = "success"
+    parse_status: str = "ok"
     has_wildcard_imports: bool = False
 
 @dataclass
@@ -136,31 +134,10 @@ def create_finding(
         **kwargs
     )
 
-def finding_to_dict(f: Finding) -> dict:
-    return {
-        "id": f.id,
-        "rule_id": f.rule_id,
-        "scanner": f.scanner,
-        "file": f.file,
-        "line": f.line,
-        "column": f.column,
-        "severity": f.severity.name,
-        "category": f.category.value,
-        "title": f.title,
-        "description": f.description,
-        "snippet": f.snippet,
-        "fingerprint": f.fingerprint,
-        "suggestion": f.suggestion,
-        "cwe": f.cwe,
-        "cvss_score": f.cvss_score,
-        "persistence": f.persistence.value,
-        "fix_status": f.fix_status.value,
-    }
-
 @dataclass
 class ScanResult:
     scanner: str
-    scanner_version: str
+    scanner_version: str = ""
     status: ScanStatus = ScanStatus.PENDING
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
@@ -236,8 +213,8 @@ class RuleDefinition:
     id: str
     name: str
     type: str
-    severity: str
-    category: str
+    severity: Severity
+    category: Category
     languages: List[str]
     description: str
     suggestion: str

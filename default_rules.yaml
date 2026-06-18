@@ -1,0 +1,20 @@
+rules:
+  - id: no-eval
+    name: "Use of eval()"
+    type: pattern
+    severity: HIGH
+    category: security
+    languages: ["python"]
+    description: "The eval() function can execute arbitrary code"
+    suggestion: "Replace eval() with a safer alternative"
+    config:
+      pattern: "(call function: (identifier) @func (#eq? @func \"eval\"))"
+
+  - id: ghost-file
+    name: "Ghost File"
+    type: ghost
+    severity: LOW
+    category: quality
+    languages: ["*"]
+    description: "File is never imported by any other module"
+    suggestion: "Remove the file or integrate it into the codebase"

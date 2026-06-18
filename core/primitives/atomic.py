@@ -18,48 +18,51 @@ def ensure_dir(path: Path) -> None:
 async def write_json(path: Path, data: Any, indent: int | None = None) -> None:
     """
     Atomically write data as JSON with durability and crash safety.
+
+    Steps:
+      1. Serialise data to JSON string
+      2. Ensure parent directory exists
+      3. Write to a UUID-named temp file in the same directory
+      4. Flush kernel buffers (f.flush)
+      5. fsync to guarantee data hits storage
+      6. Atomic rename to final path (os.replace)
+      7. Clean up temp file on any failure
     """
-    # 1. Ensure parent exists
-    ensure_dir(path.parent)
-    
-    # Serialize data - remove default=str to force failure on non-serializable objects
-    json_str = json.dumps(data, indent=indent)
-    
-    # 3. Use UUID4 for temp file name
-    tmp_path = path.with_suffix(f".{uuid.uuid4()}.tmp")
+    json_str = json.dumps(data, indent=indent)    # 1. Serialise
+    ensure_dir(path.parent)                        # 2. Ensure parent
+    tmp_path = path.with_suffix(f".{uuid.uuid4()}.tmp")   # 3. Temp path
     
     try:
-        # 3. Write to temp file
         async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-            await f.write(json_str)
-            
-            # 4. Flush internal buffer
-            await f.flush()
-            
-            # 5. fsync to guarantee data hits disk
-            os.fsync(f.fileno())
+            await f.write(json_str)    # 3. Write
+            await f.flush()            # 4. Flush
+            os.fsync(f.fileno())       # 5. fsync
         
-        # 6. Atomic rename
-        os.replace(str(tmp_path), str(path))
+        os.replace(str(tmp_path), str(path))       # 6. Atomic rename
         
     except Exception as e:
-        # 7. Cleanup on failure
         if tmp_path.exists():
-            os.remove(tmp_path)
+            try:
+                os.remove(tmp_path)    # 7. Cleanup
+            except OSError:
+                pass
         logger.error(f"Failed to atomically write JSON to {path}: {e}")
         raise
 
 async def read_json(path: Path) -> Optional[Any]:
     """
-    Read and parse a JSON file. Return None if missing or corrupt.
+    Read and parse a JSON file.
+
+    Returns None if the file does not exist (expected for first-run cases).
+    Raises OSError or json.JSONDecodeError if the file exists but is unreadable
+    or corrupt — callers must handle this explicitly rather than silently
+    initialising from defaults.
     """
     if not path.exists():
         return None
         
-    try:
-        async with aiofiles.open(path, "r", encoding="utf-8") as f:
-            content = await f.read()
-        return json.loads(content)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.error(f"Failed to read/parse JSON from {path}: {e}")
-        return None
+    async with aiofiles.open(path, "r", encoding="utf-8") as f:
+        content = await f.read()
+
+    return json.loads(content)
+    # json.JSONDecodeError and OSError propagate to the caller

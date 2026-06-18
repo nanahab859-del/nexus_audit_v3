@@ -71,13 +71,18 @@ async def test_remote_clone(tmp_path):
         assert "Cloning" in bus.publish_log.call_args[0][1]
 
 @pytest.mark.asyncio
-async def test_token_injection():
-    with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
+async def test_token_injection(tmp_path):
+    """Token must NOT appear in the git clone process arguments (credential-file approach)."""
+    captured_args = []
+
+    async def mock_create_subprocess_exec(*args, **kwargs):
+        captured_args.extend(args)
         proc = AsyncMock()
         proc.communicate.return_value = (b"", b"")
         proc.returncode = 0
-        mock_exec.return_value = proc
-        
+        return proc
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_create_subprocess_exec):
         os.environ["MY_TOKEN"] = "secret123"
         config = SyncConfig(
             enabled=True,
@@ -85,12 +90,12 @@ async def test_token_injection():
             remote_url="https://github.com/user/repo.git",
             token_env="MY_TOKEN"
         )
-        
-        await sync(config)
-        
-        cmd = mock_exec.call_args[0]
-        assert "x-access-token:secret123" in cmd[len(cmd)-2]
+        await sync(config, bus=None)
         del os.environ["MY_TOKEN"]
+
+    # The token must not appear in any subprocess argument
+    cmd_str = " ".join(str(a) for a in captured_args)
+    assert "secret123" not in cmd_str, "Token leaked into process args"
 
 @pytest.mark.asyncio
 async def test_missing_remote_url():
@@ -131,22 +136,25 @@ async def test_clone_failure_nonzero_exit():
 
 @pytest.mark.asyncio
 async def test_clone_general_exception():
-    with patch("asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec:
-        proc = AsyncMock()
-        proc.communicate.side_effect = Exception("General error x-access-token:secret123@github")
-        mock_exec.return_value = proc
-        
+    """Errors during clone should propagate as SyncError; token never in the URL."""
+    async def mock_create_subprocess_exec(*args, **kwargs):
+        raise OSError("permission denied")
+
+    with patch("asyncio.create_subprocess_exec", side_effect=mock_create_subprocess_exec):
+        os.environ["MY_TOKEN"] = "secret123"
         config = SyncConfig(
-            enabled=True, 
-            source_type="remote", 
-            remote_url="https://github.com/user/repo.git"
+            enabled=True,
+            source_type="remote",
+            remote_url="https://github.com/user/repo.git",
+            token_env="MY_TOKEN"
         )
-        with pytest.raises(SyncError) as e:
+        with pytest.raises(SyncError) as exc_info:
             await sync(config)
-        
-        # Token should be masked
-        assert "secret123" not in str(e.value)
-        assert "x-access-token:***" in str(e.value)
+        del os.environ["MY_TOKEN"]
+
+    # The raw URL (which never had the token) should be fine to appear,
+    # but the token itself must not leak.
+    assert "secret123" not in str(exc_info.value)
 
 @pytest.mark.asyncio
 async def test_unsupported_source_type():

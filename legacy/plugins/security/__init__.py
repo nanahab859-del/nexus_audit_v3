@@ -1,1 +1,0 @@
-"""Security scanner plugins."""

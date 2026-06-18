@@ -1,5 +1,5 @@
-// frontend/js/views/ai.js
 import * as api from '../api.js';
+import * as store from '../store.js';
 
 let _el = null;
 let _s = {};
@@ -400,6 +400,7 @@ function _wire() {
     btn.disabled = true;
     try {
       await _onSave({ ..._s });
+      store.set('settings', { ..._s });
     } finally {
       if (btn) {
         btn.textContent = origText;

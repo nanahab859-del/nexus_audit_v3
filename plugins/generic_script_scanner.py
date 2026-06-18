@@ -1,147 +1,115 @@
-# plugins/generic_script_scanner.py
-"""
-GenericScriptScanner — wraps any external executable as a Nexus scanner.
-
-Each custom scanner entry in settings.ui.custom_scanners is loaded by the
-PluginRegistry and represented by an instance of this class.
-
-Expected tool output format (one finding per line):
-    SEVERITY:file/path.py:LINE:Message text here
-
-Where SEVERITY is one of: CRITICAL, HIGH, MEDIUM, LOW, INFO (case-insensitive).
-A custom regex can be provided via config["output_pattern"].
-"""
-
-from __future__ import annotations
 import asyncio
-import os
 import re
-import hashlib
 from pathlib import Path
-from typing import List, Optional
+from typing import ClassVar, List, Any, Tuple
 
 from plugins.base import BaseScanner
-from core.models import Finding, Category, Severity, Persistence, FixStatus
-from core.events import EventBus
-
-
-_DEFAULT_PATTERN = (
-    r"^(?P<severity>CRITICAL|HIGH|MEDIUM|LOW|INFO):(?P<file>[^:]+):(?P<line>\d+):(?P<message>.+)$"
-)
-
-_SEVERITY_MAP = {
-    "CRITICAL": Severity.CRITICAL,
-    "HIGH":     Severity.HIGH,
-    "MEDIUM":   Severity.MEDIUM,
-    "LOW":      Severity.LOW,
-    "INFO":     Severity.INFO,
-}
-
+from core.primitives.models import Finding, Category, Severity, create_finding
+from core.primitives.events import EventBus
 
 class GenericScriptScanner(BaseScanner):
-    name     = "generic_script"   # overridden per instance
-    version  = "1.0.0"
-    languages: list[str] = ["*"]
-    category = Category.QUALITY
-    timeout  = 300
-    is_internal = True
+    name: ClassVar[str] = "generic_script"
+    version: ClassVar[str] = "1.0.0"
+    languages: ClassVar[List[str]] = ["*"]
+    category: ClassVar[Category] = Category.QUALITY
+    requires_tool: ClassVar[bool] = True
+    tool_name: ClassVar[str] = ""
+    ecosystem: ClassVar[str] = "binary"
+    timeout: ClassVar[int] = 300
+    is_internal: ClassVar[bool] = True
 
-    def __init__(
-        self,
-        name: str,
-        executable: str,
-        output_pattern: Optional[str] = None,
-    ):
-        # Override class-level name so the registry key matches
-        self.name           = name
-        self.executable     = executable
-        self.output_pattern = re.compile(
-            output_pattern or _DEFAULT_PATTERN, re.IGNORECASE
-        )
+    def __init__(self, config: dict, bus):
+        super().__init__(config, bus)
+        self._executable: str = ""
 
-    async def scan(
-        self,
-        target: Path,
-        config: dict,
-        bus: EventBus,
-    ) -> List[Finding]:
-        findings: List[Finding] = []
+    async def _build_args(self, target: Path, config: dict) -> List[str]:
+        args = config.get("args", [])
+        args.append(str(target))
+        return args
 
-        await bus.publish_log("info", f"[{self.name}] Starting custom scanner…")
-        await bus.publish_progress(self.name, 10, str(target))
+    def _parse_output(self, output: Any, config: dict = None) -> List[Finding]:
+        config = config or {}
+        fmt = config.get("output_format", "line")
+        findings = []
+        
+        if not output or not isinstance(output, str):
+            return []
+            
+        if fmt == "line":
+            for line in output.splitlines():
+                if not line.strip(): continue
+                # SEVERITY:file:line:message
+                parts = line.split(":", 3)
+                if len(parts) >= 4:
+                    sev_str, file, line_no, msg = parts[0], parts[1], parts[2], parts[3]
+                    sev_map = {"CRITICAL":Severity.CRITICAL,"HIGH":Severity.HIGH,"MEDIUM":Severity.MEDIUM,"LOW":Severity.LOW,"INFO":Severity.INFO}
+                    findings.append(create_finding(
+                        scanner=self.name, rule_id="custom-script",
+                        file=file, line=int(line_no), column=0,
+                        severity=sev_map.get(sev_str.upper(), Severity.MEDIUM),
+                        category=self.category, title=msg[:100], description=msg,
+                    ))
+        elif fmt == "regex":
+            pattern = config.get("parse_pattern")
+            if pattern:
+                for match in re.finditer(pattern, output, re.MULTILINE):
+                    groups = match.groupdict()
+                    sev = groups.get("severity","MEDIUM").upper()
+                    sev_map = {"CRITICAL":Severity.CRITICAL,"HIGH":Severity.HIGH,"MEDIUM":Severity.MEDIUM,"LOW":Severity.LOW,"INFO":Severity.INFO}
+                    findings.append(create_finding(
+                        scanner=self.name, rule_id="custom-script",
+                        file=groups.get("file",""), line=int(groups.get("line",0)), column=0,
+                        severity=sev_map.get(sev, Severity.MEDIUM),
+                        category=self.category,
+                        title=groups.get("message","")[:100],
+                        description=groups.get("message",""),
+                    ))
+        return findings
 
+    async def scan(self, target: Path, config: dict, bus: EventBus) -> List[Finding]:
+        executable = config.get("executable")
+        if not executable:
+            await bus.publish_log("error", "GenericScriptScanner: No executable configured")
+            return []
+        
+        # Store executable in instance variable (not ClassVar shadow)
+        self._executable = executable
+        
+        await bus.publish_progress(self.name, 0, str(target))
+        args = await self._build_args(target, config)
+        
+        # Run the dynamic executable
+        code, stdout, stderr = await self._run_dynamic_tool(executable, args, bus)
+        
+        if code != 0:
+            await bus.publish_log("error", f"Custom script failed: {stderr[:200]}")
+        
+        findings = self._parse_output(stdout, config)
+        await bus.publish_progress(self.name, 100, str(target))
+        return findings
+
+    async def _run_dynamic_tool(
+        self, executable: str, args: List[str], bus: EventBus
+    ) -> Tuple[int, str, str]:
+        """Run a dynamically-specified executable."""
         try:
-            env = os.environ.copy()
-            cmd = [self.executable, str(target)]
-
+            resolved = await self.resolver.resolve(executable, self.ecosystem)
+            full_cmd = resolved + args
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
+                *full_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=env,
             )
-
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self.timeout
+            )
+            return proc.returncode, stdout.decode(errors="ignore"), stderr.decode(errors="ignore")
+        except asyncio.TimeoutError:
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=self.timeout
-                )
-            except asyncio.TimeoutError:
-                await bus.publish_log(
-                    "error", f"[{self.name}] Timed out after {self.timeout}s"
-                )
-                return findings
-
-            output = (stdout or b"").decode(errors="replace")
-            if stderr:
-                await bus.publish_log(
-                    "debug",
-                    f"[{self.name}] stderr: {stderr.decode(errors='replace')[:200]}",
-                )
-
-            for raw_line in output.splitlines():
-                line = raw_line.strip()
-                if not line:
-                    continue
-                m = self.output_pattern.match(line)
-                if not m:
-                    continue
-
-                groups = m.groupdict()
-                severity_str = groups.get("severity", "MEDIUM").upper()
-                severity = _SEVERITY_MAP.get(severity_str, Severity.MEDIUM)
-                file_path = groups.get("file", "unknown")
-                line_no = int(groups.get("line", 0))
-                message = groups.get("message", line)
-
-                fid = hashlib.sha256(
-                    f"{self.name}{file_path}{line_no}{message}".encode()
-                ).hexdigest()[:16]
-
-                findings.append(
-                    Finding(
-                        id=fid,
-                        scanner=self.name,
-                        file=file_path,
-                        line=line_no,
-                        column=0,
-                        severity=severity,
-                        category=self.category,
-                        title=f"[{self.name}] {message[:80]}",
-                        description=message,
-                        suggestion=f"Review finding from custom scanner '{self.name}'.",
-                        persistence=Persistence.NEW,
-                        fix_status=FixStatus.OPEN,
-                    )
-                )
-
-        except FileNotFoundError:
-            await bus.publish_log(
-                "warning",
-                f"[{self.name}] Executable not found: {self.executable}",
-            )
-        except Exception as exc:
-            await bus.publish_log("error", f"[{self.name}] Error: {exc}")
-
-        await bus.publish_progress(self.name, 100, str(target))
-        await bus.publish_log("info", f"[{self.name}] Found {len(findings)} issues")
-        return findings
+                proc.terminate()
+                await proc.wait()
+            except:
+                pass
+            return 1, "", "Timeout exceeded"
+        except Exception as e:
+            return 1, "", str(e)

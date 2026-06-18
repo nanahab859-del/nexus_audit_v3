@@ -1,23 +1,28 @@
 from aiohttp import web
 from pathlib import Path
 from api import routes_data, routes_run, routes_settings, routes_stream, routes_config, routes_project, routes_ai
-from core.events import EventBus
-from core.registry import PluginRegistry
+from core.primitives.settings import SettingsManager
+from core.infra.registry import PluginRegistry
 from orchestrator import Orchestrator
 
 def create_app(argv=None) -> web.Application:
     app = web.Application()
-    
-    bus = EventBus()
-    orchestrator = Orchestrator(bus)
+
+    # Fix 1: SettingsManager constructed first, passed to Orchestrator.
+    # Bus is derived from orchestrator.bus so routes_stream subscribes to
+    # the same bus the orchestrator publishes on.
+    sm           = SettingsManager()
+    orchestrator = Orchestrator(sm)
+    bus          = orchestrator.bus
 
     # Shared plugin registry — stored on app so reload_registry can update it
     registry = PluginRegistry(Path("plugins"))
     registry.load()
-    
-    app['bus'] = bus
+
+    app['sm']           = sm
+    app['bus']          = bus
     app['orchestrator'] = orchestrator
-    app['registry'] = registry
+    app['registry']     = registry
 
     FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
 

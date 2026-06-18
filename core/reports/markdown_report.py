@@ -1,69 +1,106 @@
+"""Markdown report generator for audit results."""
+from __future__ import annotations
 from pathlib import Path
-from typing import Any
 
-from core.primitives.models import Job
-from core.scoring_engine import AppScore
 
 def generate_markdown_report(
-    job: Job,
-    scores: dict[str, AppScore],
-    config: dict[str, Any],
+    result_data: dict,
+    project_name: str,
     output_path: Path,
 ) -> None:
+    """
+    Generate a Markdown report from a loaded result dict.
+
+    `result_data` is the parsed content of audit_data_complete.json.
+    `project_name` is the human-readable name from ProjectSettings.
+    """
     lines = []
-    
-    # Metadata
-    project_name = Path(job.project_path).name if isinstance(job.project_path, str) else job.project_path.name
+    meta      = result_data.get("metadata", {})
+    apps      = result_data.get("apps", {})
+    findings  = result_data.get("findings", [])
+    git_ctx   = result_data.get("git_context") or {}
+    fleet_avg = result_data.get("fleet_average", 0)
+    started   = meta.get("started_at", "unknown")
+
+    # Header
     lines.append(f"# Nexus Audit Report: {project_name}")
-    lines.append(f"**Date**: {job.started_at.isoformat()}")
-    if job.git_context:
-        lines.append(f"**Commit**: {job.git_context.get('commit')} on {job.git_context.get('branch')}")
+    lines.append(f"**Date**: {started}")
+    if git_ctx:
+        commit = (git_ctx.get("commit") or "?")[:8]
+        branch = git_ctx.get("branch") or "?"
+        lines.append(f"**Commit**: `{commit}` on `{branch}`")
     lines.append("")
-    
-    # Fleet average
-    fleet = scores.get("fleet_average")
-    if fleet:
-        lines.append(f"## Fleet Health: {fleet.score:.1f}/100")
-    else:
-        lines.append("## Fleet Health: N/A")
+
+    # Fleet health
+    emoji = _health_emoji(fleet_avg)
+    lines.append(f"## Fleet Health: {fleet_avg}/100 {emoji}")
     lines.append("")
-        
-    # App scores
+
+    # App scores table
     lines.append("## Application Scores")
-    lines.append("| App | Score | Violations | Security (H/M/L) |")
-    lines.append("|-----|-------|------------|------------------|")
-    
-    for app, s in scores.items():
-        if app == "fleet_average":
-            continue
-        v = s.finding_counts.get("violations", 0)
-        sh = s.finding_counts.get("security_high", 0)
-        sm = s.finding_counts.get("security_medium", 0)
-        sl = s.finding_counts.get("security_low", 0)
-        hub = " (Hub)" if s.is_hub else ""
-        lines.append(f"| {app}{hub} | {s.score:.1f} | {v} | {sh} / {sm} / {sl} |")
-        
+    lines.append("| App | Score | Architecture | Security | Quality |")
+    lines.append("|-----|------:|-------------:|---------:|--------:|")
+    for app_name, s in sorted(apps.items(), key=lambda x: x[1].get("score", 0)):
+        fc  = s.get("finding_counts", {})
+        hub = " *(hub)*" if s.get("is_hub") else ""
+        lines.append(
+            f"| {app_name}{hub} | {s.get('score', 0)} "
+            f"| {fc.get('architecture', 0)} "
+            f"| {fc.get('security', 0)} "
+            f"| {fc.get('quality', 0)} |"
+        )
     lines.append("")
-    
-    # High severity findings
+
+    # Penalty breakdown
+    lines.append("<details>")
+    lines.append("<summary>Penalty Breakdown</summary>")
+    lines.append("")
+    lines.append("| App | Violations | Security | Complexity | Dead Code | Ghost Files |")
+    lines.append("|-----|----------:|--------:|----------:|----------:|------------:|")
+    for app_name, s in apps.items():
+        pb = s.get("penalty_breakdown", {})
+        lines.append(
+            f"| {app_name} "
+            f"| {pb.get('violation', 0):.1f} "
+            f"| {pb.get('security', 0):.1f} "
+            f"| {pb.get('complexity', 0):.1f} "
+            f"| {pb.get('dead_code', 0):.1f} "
+            f"| {pb.get('ghost_file', 0):.1f} |"
+        )
+    lines.append("")
+    lines.append("</details>")
+    lines.append("")
+
+    # Key findings — CRITICAL/HIGH and architecture violations
     lines.append("## Key Findings")
-    high_findings = []
-    for sr in job.scan_results:
-        for finding in sr.findings:
-            if finding.severity >= 4 or finding.category.value == "architecture":
-                high_findings.append(finding)
-                
-    if not high_findings:
-        lines.append("No critical findings or architectural violations.")
+    critical_high = [f for f in findings if f.get("severity") in ("CRITICAL", "HIGH")]
+    arch_only     = [f for f in findings
+                     if f.get("category") == "ARCHITECTURE" and f not in critical_high]
+    notable       = (critical_high + arch_only)[:50]
+
+    if not notable:
+        lines.append("*No critical findings or architectural violations.*")
     else:
-        for finding in high_findings[:50]:  # Limit to 50
-            lines.append(f"### {finding.title}")
-            lines.append(f"**{finding.severity.name} | {finding.category.name}**")
-            lines.append(f"**Location**: `{finding.file}:{finding.line}`")
-            lines.append(f"**Description**: {finding.description}")
-            if finding.suggestion:
-                lines.append(f"**Suggestion**: {finding.suggestion}")
+        for f in notable:
+            lines.append(f"### {f.get('title', 'Untitled')}")
+            lines.append(f"**{f.get('severity','?')} | {f.get('category','?')}**  ")
+            lines.append(f"**Location**: `{f.get('file','?')}:{f.get('line', 0)}`  ")
+            lines.append(f"**Description**: {f.get('description', '')}")
+            if f.get("suggestion"):
+                lines.append(f"**Suggestion**: {f['suggestion']}")
+            if f.get("cwe"):
+                lines.append(f"**CWE**: {f['cwe']}")
             lines.append("")
-            
-    with open(output_path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+
+    lines.append("---")
+    lines.append(f"*Generated by Nexus Audit · Job `{meta.get('job_id','?')[:8]}`*")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _health_emoji(score: int) -> str:
+    if score >= 90: return "🟢"
+    if score >= 70: return "🟡"
+    if score >= 50: return "🟠"
+    return "🔴"

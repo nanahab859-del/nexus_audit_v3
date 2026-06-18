@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Dict, Set, Tuple
@@ -25,11 +26,15 @@ def calculate_scores(
     bus: EventBus
 ) -> Tuple[Dict[str, AppScore], int]:
     
-    config = ScoringConfig(**scoring_config)
+    # Filter scoring_config to only keys ScoringConfig knows about — prevents TypeError from extra YAML fields
+    valid_keys = {f.name for f in dataclasses.fields(ScoringConfig)}
+    filtered   = {k: v for k, v in scoring_config.items() if k in valid_keys}
+    config     = ScoringConfig(**filtered)
     
-    # 1. Group DNA by app
-    app_loc: Dict[str, int] = {app: 0 for app in dna.apps + ["unknown"]}
-    app_modules: Dict[str, List[str]] = {app: [] for app in app_loc}
+    # 1. Group DNA by app — deduplicate to avoid double-counting "unknown" if it appears in dna.apps
+    all_apps = list(dict.fromkeys(dna.apps + ["unknown"]))
+    app_loc: Dict[str, int] = {app: 0 for app in all_apps}
+    app_modules: Dict[str, List[str]] = {app: [] for app in all_apps}
     
     for mod_path, mod in dna.modules.items():
         if config.exclude_tests and mod.is_test:
@@ -104,15 +109,22 @@ def calculate_scores(
         if complexity_score > config.complexity_above:
             complexity_penalty = (complexity_score - config.complexity_above) * config.complexity_factor
             
-        # Ghost files
+        # Ghost files — build imported_by from the real import graph
+        imported_by: dict[str, set] = {mod.relative_path: set() for mod in dna.modules.values()}
+        for m in dna.modules.values():
+            for imp_path in m.imports:
+                target = dna.modules.get(imp_path)
+                if target:
+                    imported_by[target.relative_path].add(m.module_path)
+
         ghost_files = 0
         for mod_path in app_modules[app]:
             mod = dna.modules[mod_path]
-            # Ghost: ok status, zero imports, zero imported-by
-            if mod.parse_status == "ok" and len(mod.imports) == 0:
-                # Need to check imported_by (this would need the graph)
-                # For now assume ghost logic is handled or placeholder
-                pass
+            if (mod.parse_status == "ok"
+                    and not mod.is_test
+                    and not mod.relative_path.endswith("__init__.py")
+                    and len(imported_by.get(mod.relative_path, set())) == 0):
+                ghost_files += 1
         ghost_file_penalty = ghost_files * config.ghost_file_per
         
         raw_score = 100 - (violation_penalty + security_penalty + complexity_penalty + dead_code_penalty + ghost_file_penalty)

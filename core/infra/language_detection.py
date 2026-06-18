@@ -1,18 +1,7 @@
 from pathlib import Path
 from typing import Set, Optional
 
-__all__ = ["LANGUAGE_EXTENSIONS", "detect", "detect_languages", "is_language_supported"]
-
-LANGUAGE_EXTENSIONS: dict[str, str] = {
-    ".py": "python", ".js": "javascript", ".mjs": "javascript",
-    ".ts": "typescript", ".tsx": "typescript", ".jsx": "javascript",
-    ".html": "html", ".htm": "html", ".go": "go", ".rs": "rust",
-    ".rb": "ruby", ".java": "java", ".c": "c", ".cpp": "cpp",
-    ".h": "c", ".hpp": "cpp", ".css": "css", ".scss": "scss",
-    ".json": "json", ".yaml": "yaml", ".yml": "yaml",
-    ".md": "markdown", ".toml": "toml", ".sh": "shell",
-    ".bash": "shell", ".jinja": "jinja", ".j2": "jinja",
-}
+__all__ = ["EXTENSION_MAP", "detect", "detect_languages", "is_language_supported"]
 
 EXACT_MATCH_MAP: dict[str, str] = {
     "Dockerfile": "dockerfile",
@@ -60,8 +49,8 @@ def detect_languages(target_path: Path, max_depth: int = 5) -> Set[str]:
                 if any(part.startswith(".") or part in ("node_modules", "__pycache__", "venv", ".venv", "dist", "build") 
                        for part in relative_path.parts): continue
                 ext = file_path.suffix.lower()
-                if ext in LANGUAGE_EXTENSIONS:
-                    languages.add(LANGUAGE_EXTENSIONS[ext])
+                if ext in EXTENSION_MAP:
+                    languages.add(EXTENSION_MAP[ext])
     except (PermissionError, OSError): pass
     return languages
 

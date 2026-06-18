@@ -1,150 +1,79 @@
-import asyncio
-import os
-import sys
-from pathlib import Path
-from typing import List
 import json
-import hashlib
-
+from pathlib import Path
+from typing import ClassVar, List, Any
 from plugins.base import BaseScanner
-from core.models import Finding, Category, Severity, Persistence, FixStatus
-from core.events import EventBus, EventType
-from core.python_exe import find_tool_command, _get_venv_python
+from core.primitives.models import Category, Severity, create_finding, Finding
 
 class BanditScanner(BaseScanner):
-    name = "bandit"
-    version = "1.0.0"
-    languages = ["python"]
-    category = Category.SECURITY
-    timeout = 60
+    name: ClassVar[str] = "bandit"
+    version: ClassVar[str] = "1.0.0"
+    languages: ClassVar[List[str]] = ["python"]
+    category: ClassVar[Category] = Category.SECURITY
+    requires_tool: ClassVar[bool] = True
+    tool_name: ClassVar[str] = "bandit"
+    timeout: ClassVar[int] = 120
 
-    async def scan(
-        self,
-        target: Path,
-        config: dict,
-        bus: EventBus,
-    ) -> List[Finding]:
-        """
-        Run Bandit security scanner on Python files.
+    async def _build_args(self, target: Path, config: dict) -> List[str]:
+        args = ["-r", str(target), "-f", "json", "-q"]
+        strictness = config.get("strictness", "medium")
+        if strictness == "high":
+            args.insert(1, "-lll")
+        elif strictness == "low":
+            args.insert(1, "-l")
+        
+        exclude = config.get("exclude_paths", [])
+        if exclude:
+            args.extend(["-x", ",".join(exclude)])
+            
+        skip = config.get("skip_checks", [])
+        if skip:
+            args.extend(["--skip"] + skip)
+            
+        return args
 
-        Reads from config:
-          - config["strictness"]       → "Low"|"Medium"|"High"  (→ -l / -ll / -lll)
-          - config["exclude_paths"]    → list[str] or comma-str of paths to exclude
-          - config["skip_checks"]      → list[str] of Bandit test IDs to skip (e.g. B101)
-          - config["_force_rescan"]    → bool (currently unused by bandit itself)
-        """
+    def _parse_output(self, output: str) -> List[Finding]:
         findings = []
-
         try:
-            await bus.publish_log("info", "Locating bandit tool...")
-            tool_cmd = find_tool_command("bandit")
-            await bus.publish_log("info", f"Using: {tool_cmd}")
+            data = json.loads(output)
+            for res in data.get("results", []):
+                # Map Bandit severity to our Enum
+                sev_str = res.get("issue_severity", "MEDIUM")
+                severity = Severity.MEDIUM
+                if sev_str == "HIGH":
+                    severity = Severity.HIGH
+                elif sev_str == "LOW":
+                    severity = Severity.LOW
+                
+                findings.append(create_finding(
+                    scanner=self.name,
+                    rule_id=res.get("test_id", "unknown"),
+                    file=res.get("filename", ""),
+                    line=int(res.get("line_number", 0)),
+                    column=int(res.get("col_offset", 0)),
+                    severity=severity,
+                    category=Category.SECURITY,
+                    title=res.get("test_name", "Bandit Finding"),
+                    description=res.get("issue_text", ""),
+                    suggestion=res.get("more_info", ""),
+                    cwe=res.get("issue_cwe", {}).get("id") if isinstance(res.get("issue_cwe"), dict) else None
+                ))
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return findings
 
-            # Prepare environment
-            env = os.environ.copy()
-            venv_python = _get_venv_python()
-            if venv_python:
-                bin_dir = venv_python.parent
-                env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
-
-            # ── Config-driven exclusions ─────────────────────────────────
-            base_excludes = [".venv", "venv", ".env", "node_modules", "build", "dist"]
-            extra_excludes = config.get("exclude_paths", [])
-            if isinstance(extra_excludes, str):
-                extra_excludes = [p.strip() for p in extra_excludes.split(",") if p.strip()]
-            all_excludes = base_excludes + list(extra_excludes)
-            exclude_str = ",".join(all_excludes)
-
-            # ── Strictness → confidence level flags ──────────────────────
-            strictness = str(config.get("strictness", "Medium")).capitalize()
-            level_flags: list[str] = {
-                "Low":    ["-l"],
-                "Medium": ["-ll"],
-                "High":   ["-lll"],
-            }.get(strictness, ["-ll"])
-
-            # ── Skip checks ──────────────────────────────────────────────
-            skip_checks = config.get("skip_checks", [])
-            if isinstance(skip_checks, str):
-                skip_checks = [s.strip() for s in skip_checks.split(",") if s.strip()]
-            skip_flags: list[str] = []
-            if skip_checks:
-                skip_flags = ["--skip", ",".join(skip_checks)]
-
-            # Build command
-            cmd = (
-                [tool_cmd, "-r", str(target)]
-                + level_flags
-                + ["-x", exclude_str]
-                + skip_flags
-                + ["-f", "json", "-q"]
-            )
-
-            await bus.publish_progress(self.name, 10, str(target))
-
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    env=env,
-                )
-
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=self.timeout
-                )
-
-                if stdout:
-                    try:
-                        data = json.loads(stdout.decode("utf-8"))
-                        issues = data.get("results", [])
-                        await bus.publish_log("info", f"Bandit found {len(issues)} issues")
-
-                        for issue in issues:
-                            severity_map = {
-                                "HIGH":   Severity.HIGH,
-                                "MEDIUM": Severity.MEDIUM,
-                                "LOW":    Severity.LOW,
-                            }
-                            finding_id = hashlib.sha256(
-                                f"{issue.get('filename')}{issue.get('line_number')}{issue.get('test_id')}".encode()
-                            ).hexdigest()[:16]
-
-                            findings.append(Finding(
-                                id=finding_id,
-                                scanner=self.name,
-                                file=issue.get("filename", "unknown"),
-                                line=issue.get("line_number", 0),
-                                column=0,
-                                severity=severity_map.get(
-                                    issue.get("severity", "LOW"), Severity.MEDIUM
-                                ),
-                                category=Category.SECURITY,
-                                title=issue.get("issue_text", "Security issue"),
-                                description=issue.get("issue_cwe", {}).get(
-                                    "id", issue.get("issue_text", "Security issue detected")
-                                ),
-                                suggestion=f"See Bandit test {issue.get('test_id')} documentation",
-                                cwe=issue.get("issue_cwe", {}).get("id"),
-                                persistence=Persistence.NEW,
-                                fix_status=FixStatus.OPEN,
-                            ))
-
-                    except json.JSONDecodeError as e:
-                        await bus.publish_log("warning", f"Bandit JSON parse error: {e}")
-                else:
-                    await bus.publish_log("info", "Bandit completed with no output")
-
-                await bus.publish_progress(self.name, 100, str(target))
-
-            except asyncio.TimeoutError:
-                await bus.publish_log("error", f"Bandit scan timed out after {self.timeout}s")
-            except Exception as e:
-                await bus.publish_log("error", f"Bandit scan error: {e}")
-
-        except FileNotFoundError as e:
-            await bus.publish_log("warning", f"Bandit not available: {e}")
-        except Exception as e:
-            await bus.publish_log("error", f"Bandit scanner error: {e}")
-
+    async def scan(self, target: Path, config: dict, bus: Any) -> List[Finding]:
+        if not await self._check_tool(bus):
+            return []
+            
+        await bus.publish_progress(self.name, 0, str(target))
+        args = await self._build_args(target, config)
+        code, stdout, stderr = await self._run_tool(args, bus)
+        
+        # Bandit returns 1 if findings found, 0 otherwise
+        if code != 0 and code != 1:
+            await bus.publish_log("error", f"Bandit failed: {stderr[:200]}")
+            return []
+            
+        findings = self._parse_output(stdout)
+        await bus.publish_progress(self.name, 100, str(target))
         return findings

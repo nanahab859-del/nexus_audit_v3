@@ -6,38 +6,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-async def _run_git(project_path: Path, *args: str) -> Optional[str]:
-    """Helper to run git commands asynchronously."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git", "-C", str(project_path), *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        except asyncio.TimeoutError:
-            try:
-                proc.terminate()
-                await proc.wait()  # Clean up zombie process
-            except Exception:
-                pass
-            logger.warning(f"Git command timed out: git {' '.join(args)}")
-            return None
-            
-        if proc.returncode != 0:
-            # Silently debug or log warning without breaking the flow
-            logger.debug(f"Git command exited with {proc.returncode}: git {' '.join(args)}")
-            return None
-            
-        return stdout.decode().strip()
-    except FileNotFoundError:
-        logger.warning("Git binary not found on this system. Skipping Git context extraction.")
-        return None
-    except Exception as e:
-        logger.warning(f"Git execution error: {e}")
-        return None
+from core.infra.git_utils import run_git as _run_git
 
 def _convert_ssh_to_https(remote_url: str) -> str:
     """Convert git@host:path.git to https://host/path"""
@@ -49,16 +18,16 @@ def _convert_ssh_to_https(remote_url: str) -> str:
 
 async def get_git_context(project_path: Path) -> dict:
     """Extract Git metadata from a project directory."""
-    remote_raw = await _run_git(project_path, "remote", "get-url", "origin")
+    remote_raw = await _run_git(["remote", "get-url", "origin"], cwd=project_path)
     remote_url = None
     if remote_raw:
         remote_url = _convert_ssh_to_https(remote_raw)
     
-    branch = await _run_git(project_path, "branch", "--show-current")
+    branch = await _run_git(["branch", "--show-current"], cwd=project_path)
     if branch == "":
         branch = None
         
-    log_output = await _run_git(project_path, "log", "-1", "--format=%H|%an|%aI")
+    log_output = await _run_git(["log", "-1", "--format=%H|%an|%aI"], cwd=project_path)
     commit, author, commit_timestamp = None, None, None
     if log_output:
         parts = log_output.split("|")

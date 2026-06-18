@@ -19,15 +19,15 @@ from pathlib import Path
 from aiohttp import web
 from dataclasses import asdict
 
-from core.config_loader import load_full_config, config_to_yaml, validate_config
-from core.settings import SettingsManager
-from core.registry import PluginRegistry
-from core.tool_resolver import (
+from core.infra.config_loader import load_full_config, config_to_yaml, validate_config
+from core.primitives.settings import SettingsManager
+from core.infra.registry import PluginRegistry
+from core.infra.tool_resolver import (
     is_tool_available, get_tool_version,
     is_tool_available_async, get_tool_version_async,
     TOOL_PIP_PACKAGE,
 )
-from core.python_exe import _get_venv_python
+from core.infra.python_exe import _get_venv_python
 import sys
 
 
@@ -60,7 +60,12 @@ SCANNER_CHECKS: dict[str, list[dict]] = {
 
 async def get_config(request: web.Request) -> web.Response:
     """Return the fully merged configuration (settings.json + YAML)."""
-    config = await load_full_config()
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    pid = workspace.active_project_id
+    if not pid:
+        return web.json_response({"error": "No active project"}, status=409)
+    config = await load_full_config(sm, pid)
     # Redact api_key
     if config.get("api_key"):
         config["api_key"] = "***"
@@ -78,14 +83,16 @@ async def save_config(request: web.Request) -> web.Response:
     if errors:
         return web.json_response({"errors": errors}, status=422)
 
-    sm = SettingsManager()
-    settings = await sm.load()
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
     import dataclasses
-    known = {f.name for f in dataclasses.fields(settings.__class__)}
+    known = {f.name for f in dataclasses.fields(gs.__class__)}
     for key, value in data.items():
         if key in known:
-            setattr(settings, key, value)
-    await sm.save()
+            setattr(gs, key, value)
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
     return web.json_response({"status": "saved"})
 
 
@@ -93,7 +100,12 @@ async def save_config(request: web.Request) -> web.Response:
 
 async def get_yaml(request: web.Request) -> web.Response:
     """Return the merged config as a YAML text document."""
-    config = await load_full_config()
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    pid = workspace.active_project_id
+    if not pid:
+        return web.json_response({"error": "No active project"}, status=409)
+    config = await load_full_config(sm, pid)
     if config.get("api_key"):
         config["api_key"] = "***"
     yaml_text = config_to_yaml(config)
@@ -162,9 +174,9 @@ async def get_scanners(request: web.Request) -> web.Response:
     if not registry._loaded:
         registry.load()
 
-    sm = SettingsManager()
-    settings = await sm.load()
-    custom_meta = (settings.ui or {}).get("custom_scanners", {})
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    custom_meta = (workspace.global_settings.ui or {}).get("custom_scanners", {})
 
     scanner_classes = registry.all()
 
@@ -256,15 +268,16 @@ async def get_scanners_status(request: web.Request) -> web.Response:
           ...
         }
     """
-    # Load plugin registry to know which plugins are actually registered
-    registry = PluginRegistry(Path("plugins"))
-    registry.load()
+    # Fix 18: use shared registry from app state — don't create a new one per call
+    registry: PluginRegistry = request.app.get('registry') or PluginRegistry(Path("plugins"))
+    if not registry._loaded:
+        registry.load()
     registered = set(registry.names())
 
-    # Fetch custom scanners from settings.ui.custom_scanners
-    sm = SettingsManager()
-    settings = await sm.load()
-    custom = (settings.ui or {}).get("custom_scanners", {})
+    # Fetch custom scanners from workspace.global_settings
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    custom = (workspace.global_settings.ui or {}).get("custom_scanners", {})
 
     result: dict[str, dict] = {}
 
@@ -383,18 +396,20 @@ async def register_custom_scanner(request: web.Request) -> web.Response:
             {"error": f"Executable not found: {executable}"}, status=400
         )
 
-    sm = SettingsManager()
-    settings = await sm.load()
-    if not isinstance(settings.ui, dict):
-        settings.ui = {}
-    if "custom_scanners" not in settings.ui:
-        settings.ui["custom_scanners"] = {}
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
+    if not isinstance(gs.ui, dict):
+        gs.ui = {}
+    if "custom_scanners" not in gs.ui:
+        gs.ui["custom_scanners"] = {}
 
-    settings.ui["custom_scanners"][name] = {
+    gs.ui["custom_scanners"][name] = {
         "executable":     executable,
         "output_pattern": output_pattern,
     }
-    await sm.save()
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
     return web.json_response({"status": "registered", "name": name})
 
 
@@ -407,16 +422,18 @@ async def delete_custom_scanner(request: web.Request) -> web.Response:
     if not name:
         return web.json_response({"error": "name is required"}, status=400)
 
-    sm = SettingsManager()
-    settings = await sm.load()
-    custom = (settings.ui or {}).get("custom_scanners", {})
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
+    custom = (gs.ui or {}).get("custom_scanners", {})
     if name not in custom:
         return web.json_response({"error": f"Custom scanner '{name}' not found"}, status=404)
 
     del custom[name]
-    if isinstance(settings.ui, dict):
-        settings.ui["custom_scanners"] = custom
-    await sm.save()
+    if isinstance(gs.ui, dict):
+        gs.ui["custom_scanners"] = custom
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
     return web.json_response({"status": "deleted", "name": name})
 
 
@@ -424,19 +441,21 @@ async def delete_custom_scanner(request: web.Request) -> web.Response:
 
 async def get_vex(request: web.Request) -> web.Response:
     """GET /api/vex — Return current VEX suppressions from settings."""
-    sm = SettingsManager()
-    settings = await sm.load()
-    vex = (settings.ui or {}).get("vex_suppressions", [])
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    vex = (workspace.global_settings.ui or {}).get("vex_suppressions", [])
     return web.json_response({"suppressions": vex})
 
 
 async def delete_vex(request: web.Request) -> web.Response:
     """DELETE /api/vex — Clear all VEX suppressions."""
-    sm = SettingsManager()
-    settings = await sm.load()
-    if isinstance(settings.ui, dict):
-        settings.ui["vex_suppressions"] = []
-    await sm.save()
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
+    if isinstance(gs.ui, dict):
+        gs.ui["vex_suppressions"] = []
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
     return web.json_response({"status": "cleared"})
 
 
@@ -464,19 +483,21 @@ async def upload_vex(request: web.Request) -> web.Response:
     elif isinstance(data, dict):
         entries = data.get("vulnerabilities", data.get("suppressions", []))
 
-    sm = SettingsManager()
-    settings = await sm.load()
-    if not isinstance(settings.ui, dict):
-        settings.ui = {}
-    existing = settings.ui.get("vex_suppressions", [])
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
+    if not isinstance(gs.ui, dict):
+        gs.ui = {}
+    existing = gs.ui.get("vex_suppressions", [])
     # De-duplicate by ID if present
     existing_ids = {e.get("id") for e in existing if isinstance(e, dict) and e.get("id")}
     new_entries = [e for e in entries if not (isinstance(e, dict) and e.get("id") in existing_ids)]
-    settings.ui["vex_suppressions"] = existing + new_entries
-    await sm.save()
+    gs.ui["vex_suppressions"] = existing + new_entries
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
     return web.json_response({
         "status": "imported",
         "added": len(new_entries),
-        "total": len(settings.ui["vex_suppressions"]),
+        "total": len(gs.ui["vex_suppressions"]),
     })
 

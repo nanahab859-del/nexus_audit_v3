@@ -28,14 +28,15 @@ async def load_score_history(
         return history_data
 
     # Gather files
-    files = sorted([f for f in history_dir.glob("audit_summary_*.json")], key=lambda x: x.stat().st_mtime, reverse=True)
+    files = sorted([f for f in history_dir.glob("*/audit_summary.json")], key=lambda x: x.stat().st_mtime, reverse=True)
     
     # Take max_runs
     files = files[:max_runs]
     
-    # Read concurrently
+    # Read concurrently — return_exceptions=True so a corrupt file doesn't crash the whole load
     tasks = [read_json(f) for f in files]
-    summaries = await asyncio.gather(*tasks)
+    raw = await asyncio.gather(*tasks, return_exceptions=True)
+    summaries = [s for s in raw if isinstance(s, dict)]
     
     # Filter valid
     valid_summaries = [s for s in summaries if s and "timestamp" in s and "fleet_average" in s]
@@ -62,41 +63,41 @@ async def compute_violation_persistence(
     Tag each current finding with a persistence status.
     """
     if not history_dir.exists():
-        results = []
-        for f in current_findings:
-            results.append(replace(f, persistence=Persistence.NEW))
-        return results
+        return [replace(f, persistence=Persistence.NEW) for f in current_findings]
         
-    # Gather files
-    files = sorted([f for f in history_dir.glob("audit_summary_*.json")], key=lambda x: x.stat().st_mtime, reverse=True)
-    files = files[:max_runs]
+    files = sorted(
+        [f for f in history_dir.glob("*/audit_summary.json")],
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )[:max_runs]
     
-    # Read concurrently
     tasks = [read_json(f) for f in files]
-    summaries = await asyncio.gather(*tasks)
-    
-    # Map fingerprint to count
+    raw   = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Count how many files were actually readable
+    num_available = sum(1 for s in raw if isinstance(s, dict))
+
     fp_counts: Dict[str, int] = {}
-    for s in summaries:
-        if s and "findings" in s:
+    for s in raw:
+        if isinstance(s, dict) and "findings" in s:
             for f_data in s["findings"]:
                 fp = f_data.get("fingerprint")
                 if fp:
                     fp_counts[fp] = fp_counts.get(fp, 0) + 1
-                    
-    # Tag findings
+
     results = []
     for f in current_findings:
-        fp = FixQueue.fingerprint(f)
+        fp    = FixQueue.fingerprint(f)
         count = fp_counts.get(fp, 0)
-        
+
         if count == 0:
             persistence = Persistence.NEW
-        elif count == max_runs:
+        elif num_available > 0 and count >= num_available:
+            # Appeared in every available run — treat as persistent
             persistence = Persistence.PERSISTENT
         else:
             persistence = Persistence.INTERMITTENT
-            
+
         results.append(replace(f, persistence=persistence))
-            
+
     return results

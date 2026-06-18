@@ -14,8 +14,10 @@ class PluginRegistry:
         self._plugins_dir = plugins_dir
         self._registry: Dict[str, type] = {}
         self._loaded = False
+        self._bus: Optional[EventBus] = None   # stored so reload() can reuse it
 
     def load(self, bus: Optional[EventBus] = None) -> None:
+        self._bus = bus or self._bus   # update if provided, keep stored if not
         if self._loaded:
             return
         
@@ -81,7 +83,7 @@ class PluginRegistry:
     def reload(self) -> None:
         self._registry = {}
         self._loaded = False
-        self.load()
+        self.load()   # uses stored self._bus — no bus lost
 
     def get(self, name: str) -> Optional[type]:
         return self._registry.get(name)

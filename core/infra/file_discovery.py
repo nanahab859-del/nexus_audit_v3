@@ -62,8 +62,12 @@ def _walk_project(
                 continue
                 
             # Exclude patterns check
-            if exclude_patterns and any(fnmatch.fnmatch(file, p) for p in exclude_patterns):
-                continue
+            if exclude_patterns:
+                rel_str = str(rel_path).replace("\\", "/")
+                if any(fnmatch.fnmatch(rel_str, p) for p in exclude_patterns):
+                    continue
+                if any(fnmatch.fnmatch(file, p) for p in exclude_patterns):
+                    continue
                 
             # Size check
             try:

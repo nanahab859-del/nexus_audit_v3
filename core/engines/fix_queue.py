@@ -58,6 +58,28 @@ class FixQueue:
     async def _save(self) -> None:
         await write_json(self._path, self._data, indent=4)
 
+    # ── Public API for CLI handlers ────────────────────────────────────────────
+
+    async def load(self) -> None:
+        """Public alias for _load(). Called by CLI handlers."""
+        await self._load()
+
+    def entries(self) -> list:
+        """Return all fix queue entries as a list of dicts."""
+        return list(self._data.values())
+
+    def get_entry(self, fingerprint: str) -> Optional[dict]:
+        """
+        Return the entry for the given fingerprint, or None.
+        Supports prefix matching (first N chars) for usability at the CLI.
+        """
+        if fingerprint in self._data:
+            return self._data[fingerprint]
+        for key, entry in self._data.items():
+            if key.startswith(fingerprint):
+                return entry
+        return None
+
     async def get_status(self, fingerprint: str) -> Optional[str]:
         async with self._lock:
             await self._load()

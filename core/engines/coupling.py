@@ -22,6 +22,9 @@ def build_coupling_matrix(
     n = len(apps)
     matrix = [[0] * n for _ in range(n)]
 
+    # Precompute lookup dict for O(1) index lookups inside the loop
+    app_to_idx: dict[str, int] = {app: i for i, app in enumerate(apps)}
+
     # 4. Collect raw data
     violation_pairs = defaultdict(list)   # (from_app, to_app) -> [details]
     allowed_pairs = defaultdict(lambda: {"count": 0, "reason": "default_allow"})
@@ -29,7 +32,7 @@ def build_coupling_matrix(
 
     for mod in dna.modules.values():
         from_app = mod.app
-        from_idx = apps.index(from_app) if from_app in apps else -1
+        from_idx = app_to_idx.get(from_app, -1)
         if from_idx == -1: continue
 
         for import_path, line_number in mod.imports.items():
@@ -38,10 +41,10 @@ def build_coupling_matrix(
             target_app = target_mod.app if target_mod else None
             
             # If target_app is None, it's external/framework - skip per contract
-            if not target_app or target_app not in apps:
+            if not target_app or target_app not in app_to_idx:
                 continue
 
-            to_idx = apps.index(target_app)
+            to_idx = app_to_idx[target_app]
             matrix[from_idx][to_idx] += 1
             cross_app_tracker[(from_idx, to_idx)] = cross_app_tracker.get((from_idx, to_idx), 0) + 1
 
@@ -70,16 +73,20 @@ def build_coupling_matrix(
             
     # Mark in violations
     for (from_app, to_app), details in violation_pairs.items():
-        from_idx = apps.index(from_app)
-        to_idx = apps.index(to_app)
+        from_idx = app_to_idx.get(from_app, -1)
+        to_idx = app_to_idx.get(to_app, -1)
+        if from_idx == -1 or to_idx == -1:
+            continue
         if frozenset((from_idx, to_idx)) in bidirectional_pairs:
             for v in details:
                 v["is_bidirectional"] = True
     
     # Mark in allowed
     for (from_app, to_app), data in allowed_pairs.items():
-        from_idx = apps.index(from_app)
-        to_idx = apps.index(to_app)
+        from_idx = app_to_idx.get(from_app, -1)
+        to_idx = app_to_idx.get(to_app, -1)
+        if from_idx == -1 or to_idx == -1:
+            continue
         if frozenset((from_idx, to_idx)) in bidirectional_pairs:
             data["is_bidirectional"] = True
 

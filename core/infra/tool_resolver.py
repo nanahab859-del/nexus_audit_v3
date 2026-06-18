@@ -3,6 +3,7 @@ import os
 import sys
 import shutil
 from pathlib import Path
+from time import monotonic
 from typing import Optional, List
 from core.infra.python_exe import get_venv_python, get_python_for_tools
 
@@ -10,8 +11,11 @@ class ToolNotFoundError(Exception):
     pass
 
 class ToolResolver:
+    _NOT_FOUND_TTL = 300   # 5 minutes
+
     def __init__(self):
-        self._resolved: dict[str, Optional[List[str]]] = {}
+        self._resolved: dict[str, Optional[List[str]]] = {}   # successes (permanent)
+        self._not_found: dict[str, float] = {}                # failures with TTL (monotonic timestamps)
 
     async def is_available(self, tool_name: str, ecosystem: str = "python") -> bool:
         try:
@@ -24,10 +28,13 @@ class ToolResolver:
         # 1. Cache check
         cache_key = f"{ecosystem}:{tool_name}"
         if cache_key in self._resolved:
-            cached = self._resolved[cache_key]
-            if cached is None:
+            return self._resolved[cache_key]
+
+        # Negative cache with TTL
+        if cache_key in self._not_found:
+            if monotonic() - self._not_found[cache_key] < self._NOT_FOUND_TTL:
                 raise ToolNotFoundError(f"{tool_name} not found in {ecosystem}.")
-            return cached
+            del self._not_found[cache_key]   # TTL expired — retry
 
         # 2. Node ecosystem
         if ecosystem == "node":
@@ -43,7 +50,7 @@ class ToolResolver:
                 result = [found]
                 self._resolved[cache_key] = result
                 return result
-            self._resolved[cache_key] = None
+            self._not_found[cache_key] = monotonic()
             raise ToolNotFoundError(f"{tool_name} not found in node_modules or system path.")
 
         # 3. Binary ecosystem (System PATH only)
@@ -53,7 +60,7 @@ class ToolResolver:
                 result = [found]
                 self._resolved[cache_key] = result
                 return result
-            self._resolved[cache_key] = None
+            self._not_found[cache_key] = monotonic()
             raise ToolNotFoundError(f"{tool_name} not found in system path.")
 
         # 4. Python ecosystem (default)
@@ -92,5 +99,52 @@ class ToolResolver:
             pass
 
         # Not found
-        self._resolved[cache_key] = None
+        self._not_found[cache_key] = monotonic()
         raise ToolNotFoundError(f"{tool_name} not found in python environment.")
+
+    def clear_cache(self) -> None:
+        """Force re-resolution of all tools. Call after installing a scanner."""
+        self._resolved.clear()
+        self._not_found.clear()
+
+
+# ── Module-level helpers (imported by routes_config) ─────────────────────────
+
+TOOL_PIP_PACKAGE: dict = {
+    "bandit":    "bandit",
+    "ruff":      "ruff",
+    "mypy":      "mypy",
+    "vulture":   "vulture",
+    "radon":     "radon",
+    "pylint":    "pylint",
+    "semgrep":   "semgrep",
+    "pip_audit": "pip-audit",
+    "lizard":    "lizard",
+    "djlint":    "djlint",
+    "trufflehog":"trufflehog",
+    "eslint":    "eslint",
+}
+
+
+def is_tool_available(tool_name: str) -> bool:
+    return shutil.which(tool_name) is not None
+
+
+def get_tool_version(tool_name: str) -> str | None:
+    import subprocess
+    try:
+        r = subprocess.run(
+            [tool_name, "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return (r.stdout or r.stderr or "").strip().splitlines()[0] or None
+    except Exception:
+        return None
+
+
+async def is_tool_available_async(tool_name: str) -> bool:
+    return await asyncio.to_thread(is_tool_available, tool_name)
+
+
+async def get_tool_version_async(tool_name: str) -> str | None:
+    return await asyncio.to_thread(get_tool_version, tool_name)

@@ -1,10 +1,19 @@
-# conftest.py — lives at the project root so pytest adds it to sys.path
-# This is the ONLY thing needed to fix "ModuleNotFoundError: No module named 'orchestrator'"
-import sys
-from pathlib import Path
+import pytest
+from core.primitives.settings import SettingsManager
 
-# Ensure the project root is always on sys.path regardless of where pytest is
-# invoked from (e.g. `pytest tests/` from /home/yusupha/my_tools/nexus_audit_v3).
-ROOT = Path(__file__).parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch, tmp_path):
+    """
+    Override the root configuration directory during test execution
+    to guarantee zero cross-contamination with the local environment.
+    """
+    original_init = SettingsManager.__init__
+    
+    def mock_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self._workspace_path = tmp_path / ".nexus_audit" / "workspace.json"
+        self._projects_dir = tmp_path / ".nexus_audit" / "projects"
+        self._workspace_path.parent.mkdir(parents=True, exist_ok=True)
+        self._projects_dir.mkdir(parents=True, exist_ok=True)
+        
+    monkeypatch.setattr(SettingsManager, "__init__", mock_init)

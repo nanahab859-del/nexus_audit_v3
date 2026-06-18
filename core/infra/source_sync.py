@@ -5,6 +5,7 @@ import tempfile
 import uuid
 import fnmatch
 import logging
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -27,12 +28,6 @@ class SyncConfig:
 class SyncError(Exception):
     """Raised when source sync fails."""
     pass
-
-def _inject_token(url: str, token: str) -> str:
-    # https://github.com/user/repo.git -> https://x-access-token:token@github.com/user/repo.git
-    # Simple replacement assuming github/gitlab style
-    import re
-    return re.sub(r'https://([^/]+)/', f'https://x-access-token:{token}@\\1/', url)
 
 def _mask_token(text: str) -> str:
     import re
@@ -69,34 +64,77 @@ async def sync(config: SyncConfig, bus: Optional[EventBus] = None) -> Path:
     elif config.source_type == "remote":
         if not config.remote_url:
             raise SyncError("Remote URL is required")
-        
+
         url = config.remote_url
-        if config.token_env:
-            token = os.environ.get(config.token_env)
-            if token:
-                url = _inject_token(url, token)
-        
-        masked_url = _mask_token(url)
+        token = os.environ.get(config.token_env) if config.token_env else None
+
+        masked_url = url
         if bus:
             await bus.publish_log("info", f"Cloning {masked_url}...")
-            
-        cmd = ["git", "clone", "--depth", "1", "--branch", config.remote_branch, url, str(wd)]
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd, 
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120.0)
-            
-            if proc.returncode != 0:
-                raise SyncError(f"Clone failed: {stderr.decode().strip()[:500]}")
-        except asyncio.TimeoutError:
-            raise SyncError("Clone timed out after 120 seconds")
-        except Exception as e:
-            raise SyncError(f"Clone failed: {_mask_token(str(e))}")
-        
+
+        if token:
+            await _clone_with_token(url, token, wd)
+        else:
+            cmd = ["git", "clone", "--depth", "1", "--branch", config.remote_branch, url, str(wd)]
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+                if proc.returncode != 0:
+                    raise SyncError(f"Clone failed: {stderr.decode().strip()[:500]}")
+            except asyncio.TimeoutError:
+                raise SyncError("Clone timed out after 120 seconds")
+            except SyncError:
+                raise
+            except Exception as e:
+                raise SyncError(f"Clone failed: {e}")
+
         return wd
-        
+
     else:
         raise SyncError(f"Unknown source_type: {config.source_type}")
+
+
+async def _clone_with_token(url: str, token: str, dest: Path) -> None:
+    """Clone a private repo using a temporary credential file (token never in process list)."""
+    parsed = urlparse(url)
+    cred_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".creds", delete=False
+        ) as cf:
+            cf.write(f"https://oauth2:{token}@{parsed.netloc}\n")
+            cred_path = cf.name
+        os.chmod(cred_path, 0o600)
+
+        env = {
+            **os.environ,
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": f"store --file={cred_path}",
+        }
+        proc = await asyncio.create_subprocess_exec(
+            "git", "clone", url, str(dest),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if proc.returncode != 0:
+            raise SyncError(stderr.decode(errors="replace").strip())
+    except SyncError:
+        raise
+    except asyncio.TimeoutError:
+        raise SyncError("Clone timed out after 120 seconds")
+    except Exception as e:
+        raise SyncError(str(e))
+    finally:
+        if cred_path:
+            try:
+                os.unlink(cred_path)   # always delete — even on failure
+            except OSError:
+                pass

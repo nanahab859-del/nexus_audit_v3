@@ -5,14 +5,14 @@ from core.infra.git_context import get_git_context, _convert_ssh_to_https
 
 @pytest.mark.asyncio
 async def test_get_git_context_valid(monkeypatch):
-    async def mock_run_git(path, *args):
+    async def mock_run_git(args, *, cwd=None, timeout=30):
         cmd = " ".join(args)
         if "remote get-url origin" in cmd: return "git@github.com:user/repo.git"
         if "branch --show-current" in cmd: return "main"
         if "log -1 --format=%H|%an|%aI" in cmd: return "abc123def456|John Doe|2023-01-01T00:00:00Z"
         return ""
     monkeypatch.setattr("core.infra.git_context._run_git", mock_run_git)
-    
+
     ctx = await get_git_context(Path("/tmp"))
     assert ctx["remote_url"] == "https://github.com/user/repo"
     assert ctx["raw_remote_url"] == "git@github.com:user/repo.git"
@@ -23,13 +23,13 @@ async def test_get_git_context_valid(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_git_context_detached_head(monkeypatch):
-    async def mock_run_git(path, *args):
+    async def mock_run_git(args, *, cwd=None, timeout=30):
         cmd = " ".join(args)
         if "remote get-url origin" in cmd: return "https://github.com/user/repo"
         if "branch --show-current" in cmd: return ""
         return "val"
     monkeypatch.setattr("core.infra.git_context._run_git", mock_run_git)
-    
+
     ctx = await get_git_context(Path("/tmp"))
     assert ctx["branch"] is None
 
@@ -39,7 +39,7 @@ def test_convert_ssh_to_https():
 
 @pytest.mark.asyncio
 async def test_get_git_context_not_repo(monkeypatch):
-    async def mock_run_git(path, *args):
+    async def mock_run_git(args, *, cwd=None, timeout=30):
         return None
     monkeypatch.setattr("core.infra.git_context._run_git", mock_run_git)
     assert await get_git_context(Path("/tmp")) == {}
@@ -55,14 +55,13 @@ async def test_get_git_context_timeout(monkeypatch):
             async def wait(self): pass
         return MockProc()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
-    
+
     def mock_wait_for(aw, timeout):
         raise asyncio.TimeoutError()
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
-    
-    # We test the _run_git directly to hit the timeout line
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res is None
 
 @pytest.mark.asyncio
@@ -70,9 +69,9 @@ async def test_get_git_context_git_not_installed(monkeypatch):
     async def mock_create_subprocess_exec(*args, **kwargs):
         raise FileNotFoundError()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
-    
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res is None
 
 @pytest.mark.asyncio
@@ -80,9 +79,9 @@ async def test_get_git_context_general_exception(monkeypatch):
     async def mock_create_subprocess_exec(*args, **kwargs):
         raise Exception("general error")
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
-    
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res is None
 
 @pytest.mark.asyncio
@@ -95,9 +94,9 @@ async def test_get_git_context_non_zero_exit(monkeypatch):
         return MockProc()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
     monkeypatch.setattr(asyncio, "wait_for", lambda aw, timeout: aw)
-    
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res is None
 
 @pytest.mark.asyncio
@@ -109,9 +108,9 @@ async def test_run_git_success(monkeypatch):
                 return b"success output\n", b""
         return MockProc()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
-    
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res == "success output"
 
 @pytest.mark.asyncio
@@ -126,7 +125,7 @@ async def test_run_git_timeout_exception_handling(monkeypatch):
                 raise Exception("wait failed")
         return MockProc()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
-    
-    from core.infra.git_context import _run_git
-    res = await _run_git(Path("/tmp"), "status")
+
+    from core.infra.git_utils import run_git
+    res = await run_git(["status"], cwd=Path("/tmp"))
     assert res is None

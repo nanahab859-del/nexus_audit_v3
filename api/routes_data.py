@@ -1,6 +1,7 @@
 from aiohttp import web
 from pathlib import Path
-from core.atomic import read_json
+from core.primitives.atomic import read_json
+from core.primitives.settings import SettingsManager
 
 # ── App version ────────────────────────────────────────────────────────────────
 # Read from pyproject.toml if available, otherwise fall back to constant.
@@ -28,22 +29,40 @@ async def get_status(request: web.Request) -> web.Response:
     orchestrator = request.app['orchestrator']
     job = orchestrator.current_job
     if job:
+        state_val = job.state.value if hasattr(job.state, 'value') else str(job.state)
         return web.json_response({
-            "state": job.state, "job_id": job.id, "version": APP_VERSION
+            "state": state_val, "job_id": job.id, "version": APP_VERSION
         })
     return web.json_response({"state": "idle", "job_id": None, "version": APP_VERSION})
 
 
 async def get_data(request: web.Request) -> web.Response:
-    data = await read_json(Path("audit_data_complete.json"))
-    if data is None:
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    pid = workspace.active_project_id
+    if not pid:
         return web.json_response(_EMPTY_DATA_RESPONSE)
-    return web.json_response(data)
+
+    jobs_dir = Path.home() / ".nexus_audit" / "projects" / pid / "jobs"
+    if not jobs_dir.exists():
+        return web.json_response(_EMPTY_DATA_RESPONSE)
+
+    candidates = sorted(jobs_dir.iterdir(), reverse=True)
+    job_dir = next(
+        (d for d in candidates if (d / "audit_data_complete.json").exists()),
+        None,
+    )
+    if not job_dir:
+        return web.json_response(_EMPTY_DATA_RESPONSE)
+
+    data = await read_json(job_dir / "audit_data_complete.json")
+    return web.json_response(data or _EMPTY_DATA_RESPONSE)
 
 
 async def get_capabilities(request: web.Request) -> web.Response:
-    from core.models import Category, Severity
+    from core.primitives.models import Category, Severity
     return web.json_response({
+        "version": APP_VERSION,
         "stacks": [
             "Python", "Go", "JavaScript", "TypeScript",
             "Rust", "Ruby", "Java", "C++", "PHP", "C#"
@@ -51,7 +70,6 @@ async def get_capabilities(request: web.Request) -> web.Response:
         "output_formats": ["JSON", "HTML", "PDF", "Markdown"],
         "severity_levels": [s.value for s in Severity],
         "scanner_categories": [c.value for c in Category],
-        "version": APP_VERSION,
         "server_url": request.host,
         "ai_providers": [
             {
@@ -94,7 +112,7 @@ async def get_capabilities(request: web.Request) -> web.Response:
                 "max_tokens_limit": 128000,
                 "models": []
             }
-        ]
+        ],
     })
 
 

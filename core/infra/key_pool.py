@@ -1,81 +1,84 @@
+"""
+Round-robin API key pool with caller-driven rate limiting.
+Keys are NOT marked unavailable on successful use.
+Call mark_rate_limited(key) only on HTTP 429 / quota errors.
+"""
+from __future__ import annotations
 import asyncio
-import time
 import logging
-import os
-from dataclasses import dataclass, field
-from typing import Optional, List
+from dataclasses import dataclass
+from time import monotonic
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
-class KeyEntry:
-    key: str
-    exhausted_until: float = 0.0
+class _KeyEntry:
+    key:               str
+    unavailable_until: float = 0.0   # monotonic; 0 = always available
+
 
 class KeyPool:
     def __init__(
         self,
-        provider: str,
         primary_key: str,
-        extra_keys: List[str] = None,
-        cooldown_seconds: int = 60,
-        max_keys: int = 20
-    ):
-        self.provider = provider
-        self.cooldown_seconds = cooldown_seconds
-        self.max_keys = max_keys
-        
-        # Initialize keys
-        self._keys: List[KeyEntry] = []
-        if primary_key:
-            self._keys.append(KeyEntry(key=primary_key))
-        if extra_keys:
-            for k in extra_keys:
-                if len(self._keys) < self.max_keys:
-                    self._keys.append(KeyEntry(key=k))
-        
-        self._lock = asyncio.Lock()
-        
-        logger.info(f"KeyPool initialized with {len(self._keys)} keys for {self.provider}")
-        if len(self._keys) == 0:
-            logger.warning(f"KeyPool initialized with 0 keys for {self.provider}")
+        extra_keys: Optional[List[str]] = None,
+        cooldown_seconds: float = 60.0,
+    ) -> None:
+        self._cooldown = cooldown_seconds
+        self._entries: List[_KeyEntry] = [_KeyEntry(key=primary_key)]
+        for k in (extra_keys or []):
+            self._entries.append(_KeyEntry(key=k))
+        self._index = 0
+        self._lock  = asyncio.Lock()
+
+    async def next_key(self) -> Optional[str]:
+        """
+        Return the next available key in round-robin order.
+        Returns None only if ALL keys are currently rate-limited.
+        Does NOT mark the returned key unavailable.
+        """
+        async with self._lock:
+            now = monotonic()
+            n   = len(self._entries)
+            for i in range(n):
+                entry = self._entries[(self._index + i) % n]
+                if entry.unavailable_until <= now:
+                    self._index = (self._index + i + 1) % n
+                    return entry.key
+            soonest = min(e.unavailable_until for e in self._entries) - now
+            logger.warning("All %d key(s) rate-limited. Next available in %.0fs.", n, soonest)
+            return None
+
+    async def mark_rate_limited(
+        self, key: str, cooldown_seconds: Optional[float] = None
+    ) -> None:
+        """Mark a specific key as rate-limited. Call on HTTP 429 only."""
+        wait = cooldown_seconds if cooldown_seconds is not None else self._cooldown
+        async with self._lock:
+            for entry in self._entries:
+                if entry.key == key:
+                    entry.unavailable_until = monotonic() + wait
+                    logger.info("Key ...%s rate-limited for %.0fs.", key[-4:], wait)
+                    return
 
     async def add_key(self, key: str) -> None:
         async with self._lock:
-            if len(self._keys) < self.max_keys:
-                self._keys.append(KeyEntry(key=key))
-
-    async def next_key(self) -> Optional[str]:
-        async with self._lock:
-            now = time.time()
-            for entry in self._keys:
-                if entry.exhausted_until > 0 and now >= entry.exhausted_until:
-                    entry.exhausted_until = 0.0  # re-enable
-                
-                if entry.exhausted_until == 0.0:
-                    entry.exhausted_until = now + self.cooldown_seconds
-                    return entry.key
-        
-        logger.critical(f"All API keys for {self.provider} are exhausted.")
-        return None
-
-    async def mark_exhausted(self, key: str) -> None:
-        async with self._lock:
-            now = time.time()
-            for entry in self._keys:
-                if entry.key == key:
-                    entry.exhausted_until = now + self.cooldown_seconds
-                    break
+            if not any(e.key == key for e in self._entries):
+                self._entries.append(_KeyEntry(key=key))
 
     async def remove_key(self, key: str) -> None:
         async with self._lock:
-            self._keys = [e for e in self._keys if e.key != key]
+            self._entries = [e for e in self._entries if e.key != key]
+            if self._index >= len(self._entries):
+                self._index = 0
+
+    @property
+    def total_count(self) -> int:
+        return len(self._entries)
 
     async def available_count(self) -> int:
+        now = monotonic()
         async with self._lock:
-            now = time.time()
-            return sum(1 for e in self._keys if e.exhausted_until == 0.0 or now >= e.exhausted_until)
-
-    async def total_count(self) -> int:
-        async with self._lock:
-            return len(self._keys)
+            return sum(1 for e in self._entries if e.unavailable_until <= now)

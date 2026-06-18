@@ -1,8 +1,8 @@
 # api/routes_settings.py
 from aiohttp import web
-from dataclasses import asdict
-from core.settings import SettingsManager
-from core.security import encrypt, decrypt, is_encrypted
+import dataclasses
+from core.primitives.settings import SettingsManager
+from core.primitives.security import encrypt, decrypt, is_encrypted
 
 # Whitelist of allowed settings keys to prevent injection of invalid fields
 ALLOWED_SETTINGS_KEYS = {
@@ -43,9 +43,9 @@ _REDACTED = "***"
 
 
 async def get_settings(request: web.Request) -> web.Response:
-    sm = SettingsManager()
-    settings = await sm.load()
-    d = asdict(settings)
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    d = dataclasses.asdict(workspace.global_settings)
     # Redact api_key — never send the real value to the browser
     if d.get("api_key"):
         d["api_key"] = _REDACTED
@@ -53,16 +53,17 @@ async def get_settings(request: web.Request) -> web.Response:
 
 
 async def update_settings(request: web.Request) -> web.Response:
-    sm = SettingsManager()
-    settings = await sm.load()
-
+    sm: SettingsManager = request.app['sm']
     try:
         data = await request.json()
     except Exception:
         return web.json_response({"error": "Invalid JSON body"}, status=400)
 
+    workspace = await sm.load_workspace()
+    gs = workspace.global_settings
+
     for key, value in data.items():
-        if key not in ALLOWED_SETTINGS_KEYS or not hasattr(settings, key):
+        if key not in ALLOWED_SETTINGS_KEYS or not hasattr(gs, key):
             continue
 
         # Special handling for api_key: encrypt before storing
@@ -72,12 +73,13 @@ async def update_settings(request: web.Request) -> web.Response:
                 continue
             value = encrypt(value)
 
-        setattr(settings, key, value)
+        setattr(gs, key, value)
 
-    await sm.save()
+    workspace.global_settings = gs
+    await sm.save_workspace(workspace)
 
     # Return the updated settings (redacted)
-    d = asdict(settings)
+    d = dataclasses.asdict(workspace.global_settings)
     if d.get("api_key"):
         d["api_key"] = _REDACTED
     return web.json_response(d)
@@ -85,8 +87,8 @@ async def update_settings(request: web.Request) -> web.Response:
 
 async def get_decrypted_api_key(request: web.Request) -> web.Response:
     """Internal-only endpoint — returns the decrypted API key for orchestrator use."""
-    sm = SettingsManager()
-    settings = await sm.load()
-    raw = settings.api_key or ""
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    raw = workspace.global_settings.api_key or ""
     plaintext = decrypt(raw) if is_encrypted(raw) else raw
     return web.json_response({"api_key": plaintext})

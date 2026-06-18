@@ -6,13 +6,14 @@ import yaml
 from pathlib import Path
 from core.primitives.settings import SettingsManager
 from core.primitives.models import Severity
-from core.infra.config_loader import load_full_config, ConfigurationError, validate_config, deep_merge
+from core.infra.config_loader import load_full_config, ConfigurationError, validate_config
+from core.infra.utils import deep_merge
 
 def test_deep_merge():
     base = {"a": {"b": 1}, "c": 2}
     override = {"a": {"d": 3}, "c": 4}
-    res = deep_merge(base, override)
-    assert res == {"a": {"b": 1, "d": 3}, "c": 4}
+    deep_merge(base, override)   # in-place — no return value
+    assert base == {"a": {"b": 1, "d": 3}, "c": 4}
 
 @pytest.mark.asyncio
 async def test_merge_order(tmp_path):

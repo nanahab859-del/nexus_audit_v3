@@ -47,8 +47,9 @@ async def test_cache(monkeypatch):
     resolved2 = await resolver.resolve("python3")
     assert resolved == resolved2
     
-    # Second cached lookup for a failed tool
-    resolver._resolved["python:fake_tool"] = None
+    # Second cached lookup for a failed tool (uses _not_found with TTL)
+    from time import monotonic
+    resolver._not_found["python:fake_tool"] = monotonic()   # just resolved -> negative cached
     with pytest.raises(ToolNotFoundError):
         await resolver.resolve("fake_tool")
 

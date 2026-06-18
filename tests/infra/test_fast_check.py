@@ -137,21 +137,21 @@ async def test_fast_check_exception(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_fast_check_root_none(monkeypatch, tmp_path):
-    async def mock_run_git(path, *args):
-        if "rev-parse" in args and "HEAD" in args:
+    async def mock_run_git(args, *, cwd=None, timeout=30):
+        if "HEAD" in args and "rev-parse" in args:
             return "head_exists"
-        if "rev-parse" in args and "--show-toplevel" in args:
+        if "--show-toplevel" in args:
             return None
         return ""
-    monkeypatch.setattr("core.infra.fast_check._run_git", mock_run_git)
+    monkeypatch.setattr("core.infra.git_utils.run_git", mock_run_git)
     changed = await get_changed_files(tmp_path)
     assert changed is None
 
 @pytest.mark.asyncio
 async def test_run_git_command_terminate_exception(tmp_path, monkeypatch):
-    from core.infra.fast_check import _run_git
+    from core.infra.git_utils import run_git
     import asyncio
-    
+
     class MockProc:
         returncode = None
         async def communicate(self):
@@ -160,15 +160,15 @@ async def test_run_git_command_terminate_exception(tmp_path, monkeypatch):
             raise RuntimeError("Mock terminate error")
         async def wait(self):
             pass
-            
+
     async def mock_create(*args, **kwargs):
         return MockProc()
-        
+
     monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create)
     # mock wait_for to just raise TimeoutError
     async def mock_wait_for(coro, timeout):
         raise asyncio.TimeoutError()
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
-    
-    res = await _run_git(tmp_path, ["status"])
+
+    res = await run_git(["status"], cwd=tmp_path)
     assert res is None

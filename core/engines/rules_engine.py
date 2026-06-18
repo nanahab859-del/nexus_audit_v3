@@ -8,18 +8,32 @@ from typing import Optional, List, Dict, Any
 
 from core.primitives.models import Finding, ProjectDNA, RuleDefinition, create_finding, Severity, Category
 from core.primitives.events import EventBus
-from core.infra.language_detection import LANGUAGE_EXTENSIONS
+from core.infra.language_detection import EXTENSION_MAP
+from core.engines.boundary_engine import BoundaryEngine
 
 logger = logging.getLogger(__name__)
 
 class RulesEngine:
-    def __init__(self, rules_path: Path):
+    def __init__(self, rules_path: Optional[Path] = None):
         self.rules_path = rules_path
         self._rules: List[RuleDefinition] = []
         self._scoring_config: Dict[str, Any] = {}
         self._communication_config: Dict[str, Any] = {}
         self._app_definitions: List[Dict] = []
-        self._load_rules()
+        if rules_path is not None:
+            self._load_rules()
+
+    @classmethod
+    async def create(cls, rules_path: Path) -> "RulesEngine":
+        """Async factory — loads rules via asyncio.to_thread to avoid blocking the event loop."""
+        engine = cls.__new__(cls)
+        engine.rules_path = rules_path
+        engine._rules = []
+        engine._scoring_config = {}
+        engine._communication_config = {}
+        engine._app_definitions = []
+        await asyncio.to_thread(engine._load_rules)
+        return engine
 
     def _parse_severity(self, sev_str: str) -> Severity:
         try:
@@ -34,8 +48,8 @@ class RulesEngine:
             return Category.ARCHITECTURE
 
     def _load_rules(self) -> None:
-        if not self.rules_path.exists():
-            logger.warning(f"Rules file not found: {self.rules_path}")
+        if not getattr(self, 'rules_path', None) or not self.rules_path.exists():
+            logger.warning(f"Rules file not found: {getattr(self, 'rules_path', None)}")
             return
             
         try:
@@ -95,14 +109,12 @@ class RulesEngine:
     ) -> List[Finding]:
         violations: List[Finding] = []
         
-        # Build imported_by graph
-        imported_by: Dict[str, set[str]] = {p: set() for p in dna.physical_files}
+        imported_by: Dict[str, set] = {p: set() for p in dna.physical_files}
         for mod in dna.modules.values():
-            for imp in mod.imports:
-                # Naive reverse mapping
-                for physical in dna.physical_files:
-                    if physical.startswith(imp.replace(".", os.sep)):
-                        imported_by[physical].add(mod.relative_path)
+            for imp_module_path in mod.imports:
+                target = dna.modules.get(imp_module_path)
+                if target:
+                    imported_by[target.relative_path].add(mod.relative_path)
         
         for rule in self._rules:
             try:
@@ -150,27 +162,180 @@ class RulesEngine:
         return findings
 
     def _evaluate_metric(self, rule: RuleDefinition, scanner_findings: List[Finding]) -> List[Finding]:
-        # Filter scanner_findings by category/severity
-        # Create ONE summary finding if threshold exceeded
-        return [] # Placeholder, implement based on specific rule config
+        cfg            = rule.config
+        filter_cat     = cfg.get("category")
+        min_sev_str    = cfg.get("min_severity", "LOW")
+        threshold      = int(cfg.get("threshold", 1))
+
+        try:
+            min_sev = Severity[min_sev_str.upper()]
+        except KeyError:
+            min_sev = Severity.LOW
+
+        matched = [
+            f for f in scanner_findings
+            if (not filter_cat or f.category.value == filter_cat)
+            and f.severity.value >= min_sev.value
+        ]
+
+        if len(matched) >= threshold:
+            return [create_finding(
+                scanner="rules_engine",
+                rule_id=rule.id,
+                file="(project)",
+                line=0,
+                column=0,
+                severity=rule.severity,
+                category=rule.category,
+                title=rule.name,
+                description=(
+                    f"{rule.description} "
+                    f"({len(matched)} findings exceed threshold of {threshold})"
+                ),
+                suggestion=rule.suggestion,
+            )]
+        return []
 
     def _evaluate_pattern(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
-        # Implement pattern matching using tree-sitter
+        """
+        Tree-sitter-based structural pattern matching — not yet implemented.
+        Use type='regex' for text-based matching in the meantime.
+        """
+        logger.warning(
+            "Rule '%s' uses type='pattern' which is not yet implemented. "
+            "Switch to type='regex' for text-based matching. Skipping.",
+            rule.id,
+        )
         return []
 
     def _evaluate_regex(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
-        # Implement regex matching line-by-line
-        return []
+        pattern_str = rule.config.get("pattern")
+        if not pattern_str:
+            logger.warning("Rule %s: missing 'pattern' in config", rule.id)
+            return []
+
+        try:
+            compiled = re.compile(pattern_str)
+        except re.error as e:
+            logger.warning("Rule %s: invalid regex '%s': %s", rule.id, pattern_str, e)
+            return []
+
+        findings = []
+        for mod in dna.modules.values():
+            if rule.languages and "*" not in rule.languages and mod.language not in rule.languages:
+                continue
+            if mod.is_test and not rule.config.get("include_tests", False):
+                continue
+
+            try:
+                source = mod.file_path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            for lineno, line in enumerate(source.splitlines(), start=1):
+                if compiled.search(line):
+                    findings.append(create_finding(
+                        scanner="rules_engine",
+                        rule_id=rule.id,
+                        file=mod.relative_path,
+                        line=lineno,
+                        column=1,
+                        severity=rule.severity,
+                        category=rule.category,
+                        title=rule.name,
+                        description=rule.description or f"Pattern matched: {pattern_str}",
+                        suggestion=rule.suggestion,
+                    ))
+                    if rule.config.get("first_match_only", True):
+                        break   # one finding per file by default
+
+        return findings
 
     def _evaluate_cycle(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
-        # Implement DFS cycle detection as described in spec
-        return []
+        graph: Dict[str, set] = {mp: set() for mp in dna.modules}
+        for mp, mod in dna.modules.items():
+            for imp in mod.imports:
+                if imp in dna.modules:
+                    graph[mp].add(imp)
 
-    def _evaluate_boundary(self, rule: RuleDefinition, dna: ProjectDNA, scanner_findings: List[Finding], bus: EventBus) -> List[Finding]:
-        from core.boundary_engine import BoundaryEngine
-        # ... logic to delegate
-        return []
+        visited:  set[str] = set()
+        in_stack: set[str] = set()
+        findings: List[Finding] = []
+        cycles_seen: set[frozenset] = set()
+
+        def dfs(node: str, stack: list[str]) -> None:
+            visited.add(node)
+            in_stack.add(node)
+            stack.append(node)
+
+            for neighbour in graph.get(node, []):
+                if neighbour not in visited:
+                    dfs(neighbour, stack)
+                elif neighbour in in_stack:
+                    idx = stack.index(neighbour)
+                    cycle = frozenset(stack[idx:])
+                    if cycle not in cycles_seen:
+                        cycles_seen.add(cycle)
+                        cycle_str = " → ".join(stack[idx:] + [neighbour])
+                        mod = dna.modules.get(node)
+                        findings.append(create_finding(
+                            scanner="rules_engine",
+                            rule_id=rule.id,
+                            file=mod.relative_path if mod else node,
+                            line=1, column=1,
+                            severity=rule.severity,
+                            category=rule.category,
+                            title=rule.name,
+                            description=f"Import cycle detected: {cycle_str}",
+                            suggestion=rule.suggestion or "Break the cycle by extracting shared logic.",
+                        ))
+
+            stack.pop()
+            in_stack.discard(node)
+
+        for mp in dna.modules:
+            if mp not in visited:
+                dfs(mp, [])
+
+        return findings
+
+    def _evaluate_boundary(
+        self,
+        rule: RuleDefinition,
+        dna: ProjectDNA,
+        scanner_findings: List[Finding],
+        bus: EventBus
+    ) -> List[Finding]:
+        comm_config = self._communication_config or {}
+        hub_apps    = {app["name"] for app in self._app_definitions if app.get("hub")}
+        engine      = BoundaryEngine(comm_config)
+        return engine.evaluate(dna, hub_apps, bus)
 
     def _evaluate_dependency(self, rule: RuleDefinition, scanner_findings: List[Finding]) -> List[Finding]:
-        # Filter scanner_findings by category=DEPENDENCY
-        return []
+        scanner_filter = rule.config.get("scanner")
+        min_sev_str    = rule.config.get("min_severity", "LOW")
+        try:
+            min_sev = Severity[min_sev_str.upper()]
+        except KeyError:
+            min_sev = Severity.LOW
+
+        results = []
+        for f in scanner_findings:
+            if f.category != Category.DEPENDENCY:
+                continue
+            if f.severity.value < min_sev.value:
+                continue
+            if scanner_filter and f.scanner != scanner_filter:
+                continue
+            results.append(create_finding(
+                scanner="rules_engine",
+                rule_id=rule.id,
+                file=f.file,
+                line=f.line, column=f.column,
+                severity=rule.severity,
+                category=rule.category,
+                title=f"{rule.name}: {f.title}",
+                description=f.description,
+                suggestion=rule.suggestion or f.suggestion,
+            ))
+        return results

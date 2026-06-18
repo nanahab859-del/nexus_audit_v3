@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from core.infra.language_detection import (
     detect, detect_languages, is_language_supported,
-    EXTENSION_MAP, EXACT_MATCH_MAP, LANGUAGE_EXTENSIONS
+    EXTENSION_MAP, EXACT_MATCH_MAP
 )
 
 def test_detect_all_extensions():

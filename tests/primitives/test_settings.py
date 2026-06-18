@@ -215,3 +215,135 @@ async def test_severity_string_fallback(tmp_path, monkeypatch):
     
     loaded = await sm.load_project(proj.id)
     assert loaded.settings.fail_on_severity.name == "LOW"
+
+
+# ── New coverage tests ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_load_workspace_skips_malformed_project(tmp_path, monkeypatch):
+    """Covers lines 53-54: exception path when a project entry is malformed."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    import json
+    ws_data = {
+        "global_settings": {"api_key": "", "ui_theme": "dark"},
+        "projects": {
+            "bad-proj": {"id": "bad-proj"}  # missing required 'name', 'path', 'settings'
+        },
+        "active_project_id": None,
+    }
+    (tmp_path / ".nexus_audit" / "workspace.json").write_text(json.dumps(ws_data))
+    sm = SettingsManager()
+    workspace = await sm.load_workspace()
+    # The malformed project is silently skipped
+    assert "bad-proj" not in workspace.projects
+
+
+def test_get_project_raises_key_error_if_not_cached(manager):
+    """Covers line 137: get_project() raises KeyError when project not in cache."""
+    with pytest.raises(KeyError, match="not in cache"):
+        manager.get_project("nonexistent-id")
+
+
+def test_current_job_returns_none(manager):
+    """Covers line 145: current_job() always returns None (placeholder)."""
+    assert manager.current_job() is None
+
+
+@pytest.mark.asyncio
+async def test_patch_project_settings_severity_as_int(tmp_path, monkeypatch):
+    """Covers line 212: severity as int in patch_project_settings."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    sm = SettingsManager()
+    proj = await sm.register_project("test", str(tmp_path))
+
+    # Manually write an int severity into the project file
+    import json
+    pfile = tmp_path / ".nexus_audit" / "projects" / proj.id / "project.json"
+    data = json.loads(pfile.read_text())
+    data["settings"]["fail_on_severity"] = 4  # CRITICAL as int
+    pfile.write_text(json.dumps(data))
+
+    # patch_project_settings must reconstruct Severity from int
+    new_settings = await sm.patch_project_settings(proj.id, {"project_name": "patched"})
+    assert new_settings.project_name == "patched"
+    from core.primitives.models import Severity
+    assert new_settings.fail_on_severity == Severity.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_deserialise_project_severity_as_int(tmp_path, monkeypatch):
+    """Covers lines 265-268: severity as int in _deserialise_project."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    sm = SettingsManager()
+    proj = await sm.register_project("test", str(tmp_path))
+
+    import json
+    pfile = tmp_path / ".nexus_audit" / "projects" / proj.id / "project.json"
+    data = json.loads(pfile.read_text())
+    data["settings"]["fail_on_severity"] = 1  # LOW as int
+    pfile.write_text(json.dumps(data))
+
+    loaded = await sm.load_project(proj.id)
+    from core.primitives.models import Severity
+    assert loaded.settings.fail_on_severity == Severity.LOW
+
+
+@pytest.mark.asyncio
+async def test_deserialise_project_severity_unknown_type(tmp_path, monkeypatch):
+    """Covers the else branch: unrecognised severity type falls back to CRITICAL."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    sm = SettingsManager()
+    proj = await sm.register_project("test", str(tmp_path))
+
+    import json
+    pfile = tmp_path / ".nexus_audit" / "projects" / proj.id / "project.json"
+    data = json.loads(pfile.read_text())
+    data["settings"]["fail_on_severity"] = None  # neither str nor int
+    pfile.write_text(json.dumps(data))
+
+    loaded = await sm.load_project(proj.id)
+    from core.primitives.models import Severity
+    assert loaded.settings.fail_on_severity == Severity.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_patch_project_severity_unknown_type(tmp_path, monkeypatch):
+    """Covers the else/CRITICAL branch in patch_project_settings severity handling."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    sm = SettingsManager()
+    proj = await sm.register_project("test", str(tmp_path))
+
+    import json
+    pfile = tmp_path / ".nexus_audit" / "projects" / proj.id / "project.json"
+    data = json.loads(pfile.read_text())
+    data["settings"]["fail_on_severity"] = None
+    pfile.write_text(json.dumps(data))
+
+    new_settings = await sm.patch_project_settings(proj.id, {"project_name": "x"})
+    from core.primitives.models import Severity
+    assert new_settings.fail_on_severity == Severity.CRITICAL
+
+
+@pytest.mark.asyncio
+async def test_delete_project_evicts_from_cache(tmp_path, monkeypatch):
+    """Covers cache eviction in delete_project and ensures get_project raises after delete."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    (tmp_path / ".nexus_audit").mkdir()
+    sm = SettingsManager()
+    proj = await sm.register_project("test", str(tmp_path))
+
+    # Load into cache
+    await sm.load_project(proj.id)
+    assert proj.id in sm._project_cache
+
+    await sm.delete_project(proj.id)
+    assert proj.id not in sm._project_cache
+    with pytest.raises(KeyError):
+        sm.get_project(proj.id)
+

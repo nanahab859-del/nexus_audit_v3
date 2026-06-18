@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import time
 import logging
 from pathlib import Path
@@ -16,6 +17,7 @@ class DepCache:
         self._loaded = False
         self._dirty = False
         self._lock = asyncio.Lock()
+        atexit.register(self._sync_save_on_exit)
 
     def _cache_key(self, package: str, version: str) -> str:
         # Normalize: strip, lower, hyphen to underscore
@@ -85,3 +87,22 @@ class DepCache:
             self._data = {}
             self._dirty = True
             await self._save_internal()
+
+    def _sync_save_on_exit(self) -> None:
+        """Best-effort synchronous save at interpreter exit."""
+        if not self._dirty:
+            return
+        try:
+            import json
+            self._path.write_text(
+                json.dumps(self._data, default=str), encoding="utf-8"
+            )
+        except Exception:
+            pass   # logging is unreliable during shutdown
+
+    async def __aenter__(self) -> "DepCache":
+        await self._load_internal()
+        return self
+
+    async def __aexit__(self, *_) -> None:
+        await self.save()

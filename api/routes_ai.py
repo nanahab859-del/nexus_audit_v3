@@ -12,8 +12,8 @@ the api_key and ai_provider from Settings.
 """
 
 from aiohttp import web
-from core.settings import SettingsManager
-from core.security import decrypt, is_encrypted
+from core.primitives.settings import SettingsManager
+from core.primitives.security import decrypt, is_encrypted
 
 STUB_ADVICE: dict[str, str] = {
     "vulture":  "Vulture did not find a valid Python interpreter. Make sure vulture is installed in the project virtual environment: `pip install vulture`.",
@@ -45,8 +45,9 @@ async def diagnose_scanner_error(request: web.Request) -> web.Response:
     Or, when AI is disabled:
       { "error": "AI is not enabled" }  (HTTP 503)
     """
-    sm = SettingsManager()
-    settings = await sm.load()
+    sm: SettingsManager = request.app['sm']
+    workspace = await sm.load_workspace()
+    settings = workspace.global_settings
 
     if not settings.ai_enabled:
         return web.json_response(

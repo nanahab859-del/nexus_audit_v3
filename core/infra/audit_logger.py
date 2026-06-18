@@ -29,8 +29,8 @@ class AuditLogger:
             self._report_io_failure(e)
             return
         
-        token_log = self._bus.subscribe(EventType.LOG, self._handle_log)
-        token_finding = self._bus.subscribe(EventType.FINDING, self._handle_finding)
+        token_log = await self._bus.subscribe(EventType.LOG, self._handle_log)
+        token_finding = await self._bus.subscribe(EventType.FINDING, self._handle_finding)
         self._tokens = [token_log, token_finding]
         
         self._flush_task = asyncio.create_task(self._periodic_flush())
@@ -46,7 +46,7 @@ class AuditLogger:
         await self._flush_findings()
         
         for token in self._tokens:
-            self._bus.unsubscribe(token)
+            await self._bus.unsubscribe(token)
 
     async def _handle_log(self, event):
         if self._io_failed:
@@ -63,7 +63,16 @@ class AuditLogger:
             self._report_io_failure(e)
 
     async def _handle_finding(self, event):
-        self._findings_buffer.append(event.payload.get("finding"))
+        if self._io_failed:
+            self._dropped_count = getattr(self, "_dropped_count", 0) + 1
+            if self._dropped_count % 100 == 1:
+                logging.error(
+                    "audit_logger: I/O failed — %d finding(s) dropped.",
+                    self._dropped_count,
+                )
+            return
+        from core.primitives.models import to_dict
+        self._findings_buffer.append(to_dict(event.payload.get("finding")))
         if len(self._findings_buffer) >= 50:
             await self._flush_findings()
 
@@ -75,15 +84,20 @@ class AuditLogger:
         except asyncio.CancelledError:
             pass
 
-    async def _flush_findings(self):
-        if self._io_failed or not self._findings_buffer:
+    async def _flush_findings(self) -> None:
+        if not self._findings_buffer or self._io_failed:
             return
-            
+        
+        snapshot = list(self._findings_buffer)
+        
         try:
-            # Atomic overwrite of findings.json
-            await write_json(self._findings_path, self._findings_buffer, indent=4)
+            await write_json(self._findings_path, snapshot)
+            self._findings_buffer = self._findings_buffer[len(snapshot):]
         except Exception as e:
-            self._report_io_failure(e)
+            self._io_failed = True
+            logging.error(
+                "audit_logger: flush failed — findings accumulate in memory. %s", e
+            )
 
     def _report_io_failure(self, e: Exception):
         if not self._io_failure_reported:

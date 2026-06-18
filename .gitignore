@@ -18,3 +18,11 @@ venv/
 lod/audit_data_complete.json
 *.json
 *.json
+*.log
+*.csv
+*.xlsx
+*.db
+*.sqlite
+*.bak
+*.backup
+docs/

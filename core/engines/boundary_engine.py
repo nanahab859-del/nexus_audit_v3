@@ -1,7 +1,7 @@
 from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
-from core.primitives.models import ModuleEntry, ProjectDNA, Finding, Category, create_finding
+from core.primitives.models import ModuleEntry, ProjectDNA, Finding, Category, Severity, create_finding
 from core.primitives.events import EventBus
 import fnmatch
 import logging
@@ -46,7 +46,10 @@ class BoundaryEngine:
             return Classification.FRAMEWORK
             
         # 4. Bootstrap
-        if source_module.file_path.stem in self.bootstrap_files:
+        # Supports both bare stems ("modA") and full relative paths ("app1/modA.py")
+        rel = source_module.relative_path.replace("\\", "/")
+        stem = source_module.file_path.stem
+        if any(rel == b or rel.endswith("/" + b) or stem == b for b in self.bootstrap_files):
             return Classification.BOOTSTRAP
             
         # 5. Allowed pattern
@@ -84,10 +87,7 @@ class BoundaryEngine:
                 classification = self.classify_import(source_module, import_path, dna, hub_apps)
                 
                 if classification == Classification.VIOLATION:
-                    # Severity from config or default to MEDIUM
                     severity_str = self.config.get("violation_severity", "MEDIUM")
-                    # Assuming Severity enum parsing logic from previous work
-                    from core.primitives.models import Severity
                     try:
                         severity = Severity[severity_str.upper()]
                     except KeyError:

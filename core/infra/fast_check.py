@@ -5,56 +5,29 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-async def _run_git(project_path: Path, *args: str) -> Optional[str]:
-    """Helper to run git commands asynchronously."""
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "git", "-C", str(project_path), *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        except asyncio.TimeoutError:
-            try:
-                proc.terminate()
-                await proc.wait()
-            except Exception:
-                pass
-            logger.warning(f"Git command timed out: git {' '.join(args)}")
-            return None
-            
-        if proc.returncode != 0:
-            logger.debug(f"Git command failed (exit {proc.returncode}): git {' '.join(args)}")
-            return None
-            
-        return stdout.decode().strip()
-    except Exception as e:
-        logger.warning(f"Git execution error: {e}")
-        return None
+from core.infra.git_utils import run_git as _run_git
 
 async def get_changed_files(project_path: Path) -> Optional[list[Path]]:
     """
     Return a list of files changed since the last commit.
     """
     # 2. Verify HEAD exists (if no commits, force full scan)
-    head = await _run_git(project_path, "rev-parse", "--verify", "HEAD")
+    head = await _run_git(["rev-parse", "--verify", "HEAD"], cwd=project_path)
     if head is None:
         return None
 
     # 3. Get Git root directory
-    root_str = await _run_git(project_path, "rev-parse", "--show-toplevel")
+    root_str = await _run_git(["rev-parse", "--show-toplevel"], cwd=project_path)
     if root_str is None:
         return None
     git_root = Path(root_str).resolve()
 
     # 4. Get changed tracked files
-    diff_output = await _run_git(project_path, "diff", "--name-only", "HEAD")
+    diff_output = await _run_git(["diff", "--name-only", "HEAD"], cwd=project_path)
     tracked = diff_output.splitlines() if diff_output else []
 
     # 5. Get untracked files
-    untracked_output = await _run_git(project_path, "ls-files", "--others", "--exclude-standard")
+    untracked_output = await _run_git(["ls-files", "--others", "--exclude-standard"], cwd=project_path)
     untracked = untracked_output.splitlines() if untracked_output else []
 
     # 6. Combine and normalize

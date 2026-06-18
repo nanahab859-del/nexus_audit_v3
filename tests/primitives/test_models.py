@@ -1,14 +1,14 @@
 import pytest
-from core.primitives.models import Finding, Severity, Category, ProjectSettings, RetentionPolicy, QualityGate, PipelineConfig, SuppressionPolicy, finding_to_dict
+from core.primitives.models import Finding, Severity, Category, ProjectSettings, RetentionPolicy, QualityGate, PipelineConfig, SuppressionPolicy, to_dict
 
-def test_finding_to_dict_with_all_optional_fields_none():
+def test_to_dict_with_all_optional_fields_none():
     f = Finding(
         id="1", fingerprint=None, scanner="s", rule_id="r",
         file="f", line=1, column=0, severity=Severity.LOW,
         category=Category.QUALITY, title="t", description="d",
         cwe=None, cvss_score=None, suggestion=None, snippet=None
     )
-    d = finding_to_dict(f)
+    d = to_dict(f)
     assert d["cwe"] is None
     assert d["cvss_score"] is None
     assert d["suggestion"] is None
@@ -34,7 +34,7 @@ def test_basic_finding():
     assert f.id == "1"
 
 def test_configuration_error():
-    from core.primitives.models import ConfigurationError
+    from core.infra.config_loader import ConfigurationError
     err = ConfigurationError(["a", "b"])
     assert err.errors == ["a", "b"]
     assert str(err) == "a\nb"
