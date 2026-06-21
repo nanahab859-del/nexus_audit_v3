@@ -73,7 +73,11 @@ async def _handle_stream(ctx, params) -> None:
     except KeyboardInterrupt:
         pass
     finally:
-        await orch.bus.unsubscribe(token)
+        try:
+            cleanup_task = asyncio.create_task(orch.bus.unsubscribe(token))
+            await asyncio.shield(cleanup_task)
+        except asyncio.CancelledError:
+            raise
         ctx.write_live("")
 
 

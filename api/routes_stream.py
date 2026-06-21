@@ -22,8 +22,7 @@ async def stream(request: web.Request) -> web.Response:
     async def on_event(event_id: int, event: Event) -> None:
         await queue.put((event_id, event))
 
-    # Fix 8: subscribe_all is synchronous — do NOT await it.
-    # It returns an opaque token used for unsubscription.
+    # subscribe_all is async — must be awaited. Returns a token for unsubscription.
     token = await bus.subscribe_all(on_event)
 
     try:
@@ -55,8 +54,7 @@ async def stream(request: web.Request) -> web.Response:
     except (asyncio.CancelledError, ConnectionResetError):
         pass
     finally:
-        # Fix 9: unsubscribe via token — not a non-existent unsubscribe_all.
-        # unsubscribe is also synchronous.
+        # unsubscribe is also async — must be awaited to actually remove the subscriber.
         await bus.unsubscribe(token)
 
     return response

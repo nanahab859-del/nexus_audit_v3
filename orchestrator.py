@@ -75,9 +75,7 @@ class Orchestrator:
             self._current_job.state = JobState.CANCELLED
             self._current_job.finished_at = datetime.now(timezone.utc)
             await self._bus.publish_status("cancelled", self._current_job.id)
-            
-        if self._audit_logger:
-            await self._audit_logger.stop()
+        # audit_logger cleanup is handled exclusively by _run_job()'s finally block
 
     @property
     def current_job(self) -> Optional[Job]:

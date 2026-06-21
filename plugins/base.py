@@ -71,7 +71,7 @@ class BaseScanner(ABC):
         working_dir: Optional[Path] = None
     ) -> Tuple[int, str, str]:
         try:
-            cmd = await self.resolver.resolve(self.tool_name, self.ecosystem)
+            cmd = list(await self.resolver.resolve(self.tool_name, self.ecosystem))
             cmd.extend(args)
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -79,17 +79,23 @@ class BaseScanner(ABC):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout)
-            return proc.returncode, stdout.decode(errors='ignore'), stderr.decode(errors='ignore')
-        except asyncio.TimeoutError:
-            # Clean up zombies
             try:
-                proc.terminate()
-                await proc.wait()
-            except:
-                pass
-            logger.error(f"Scanner '{self.name}' timed out")
-            return 1, "", "Timeout exceeded"
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.timeout)
+                return proc.returncode, stdout.decode(errors='ignore'), stderr.decode(errors='ignore')
+            except asyncio.TimeoutError:
+                try:
+                    proc.terminate()
+                    await proc.wait()
+                except Exception:
+                    pass
+                logger.error(f"Scanner '{self.name}' timed out")
+                return 1, "", "Timeout exceeded"
+            except asyncio.CancelledError:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                raise
         except ToolNotFoundError:
             return 127, "", "Tool not found"
         except Exception as e:

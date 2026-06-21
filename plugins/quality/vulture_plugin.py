@@ -50,7 +50,7 @@ class VultureScanner(BaseScanner):
         code, stdout, stderr = await self._run_tool(args, bus)
         
         # Vulture returns 0 if nothing found, 1 if findings found
-        if code != 0 and code != 1:
+        if code > 1:
             await bus.publish_log("error", f"Vulture failed: {stderr[:200]}")
             return []
             

@@ -100,16 +100,23 @@ class GenericScriptScanner(BaseScanner):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=self.timeout
-            )
-            return proc.returncode, stdout.decode(errors="ignore"), stderr.decode(errors="ignore")
-        except asyncio.TimeoutError:
             try:
-                proc.terminate()
-                await proc.wait()
-            except:
-                pass
-            return 1, "", "Timeout exceeded"
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=self.timeout
+                )
+                return proc.returncode, stdout.decode(errors="ignore"), stderr.decode(errors="ignore")
+            except asyncio.TimeoutError:
+                try:
+                    proc.terminate()
+                    await proc.wait()
+                except Exception:
+                    pass
+                return 1, "", "Timeout exceeded"
+            except asyncio.CancelledError:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                raise
         except Exception as e:
             return 1, "", str(e)
