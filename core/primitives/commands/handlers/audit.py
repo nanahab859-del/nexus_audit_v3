@@ -110,6 +110,9 @@ async def _handle_run(ctx, params):
             await orch.bus.unsubscribe(log_token)
             await orch.bus.unsubscribe(status_token)
             await orch.bus.unsubscribe(prog_token)
+            # Live output was already printed directly via click.echo inside write_live().
+            # Clear the buffer so the CLI's _render() does not print everything a second time.
+            ctx.stdout_buffer.clear()
     else:
         try:
             job = await orch.start_job(ctx.active_project.id, fast_mode=fast)
@@ -168,7 +171,10 @@ async def _handle_history(ctx, params):
         ctx.write("No audit history found.")
         return
 
-    jobs = sorted(history_dir.iterdir(), reverse=True)[:limit]
+    # Sort by filesystem mtime so newest jobs always appear first,
+    # regardless of UUID string order (UUIDs are random — alphabetical sort
+    # does NOT equal chronological order).
+    jobs = sorted(history_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
     if not jobs:
         ctx.write("No audit history found.")
         return
