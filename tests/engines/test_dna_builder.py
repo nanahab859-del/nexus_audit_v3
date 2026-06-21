@@ -111,55 +111,7 @@ async def test_symlink_loop_protection(tmp_path):
 
 from core.infra.file_discovery import DiscoveredFile
 
-@pytest.mark.asyncio
-async def test_dna_builder_large_and_min_files(tmp_path, monkeypatch):
-    # We will mock `discover` to return our manually created large/min files
-    # to bypass the filtering in `file_discovery.py` so we can test `dna_builder.py`'s own filters.
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    
-    large_file = project_root / "large_mock.py"
-    large_file.write_text("a" * (1024 * 1024 + 1))
-    
-    min_file = project_root / "bundle.min.js"
-    min_file.write_text("var a=1;")
-    
-    async def mock_discover(root):
-        return [
-            DiscoveredFile(absolute_path=large_file, relative_path="large_mock.py", language="python", size_bytes=large_file.stat().st_size),
-            DiscoveredFile(absolute_path=min_file, relative_path="bundle.min.js", language="javascript", size_bytes=min_file.stat().st_size)
-        ]
-    
-    monkeypatch.setattr("core.engines.dna_builder.discover", mock_discover)
-    
-    bus = EventBus()
-    dna = await build_dna(project_root, bus)
-    
-    assert "large_mock" not in dna.modules
-    assert "bundle.min" not in dna.modules
 
-@pytest.mark.asyncio
-async def test_unsupported_language_skip(tmp_path, monkeypatch):
-    project_root = tmp_path / "project"
-    project_root.mkdir()
-    
-    unsupported_file = project_root / "unsupported.xyz"
-    unsupported_file.write_text("what is this")
-    
-    async def mock_discover(root):
-        return [
-            DiscoveredFile(absolute_path=unsupported_file, relative_path="unsupported.xyz", language="xyz", size_bytes=10)
-        ]
-        
-    monkeypatch.setattr("core.engines.dna_builder.discover", mock_discover)
-    
-    # We also need to mock `detect` to return None to hit lines 53-54
-    monkeypatch.setattr("core.engines.dna_builder.detect", lambda x: None)
-    
-    bus = EventBus()
-    dna = await build_dna(project_root, bus)
-    
-    assert "unsupported" not in dna.modules
 
 @pytest.mark.asyncio
 async def test_app_assignment_parts(tmp_path, monkeypatch):

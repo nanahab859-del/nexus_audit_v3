@@ -21,6 +21,7 @@ def orchestrator_with_settings(tmp_path, monkeypatch):
     
     sm = SettingsManager()
     import asyncio
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
     proj = asyncio.run(sm.register_project("test-project", str(tmp_path / "src")))
     
     orch = Orchestrator(sm)

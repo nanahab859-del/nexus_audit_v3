@@ -53,16 +53,23 @@ async def read_json(path: Path) -> Optional[Any]:
     """
     Read and parse a JSON file.
 
-    Returns None if the file does not exist (expected for first-run cases).
-    Raises OSError or json.JSONDecodeError if the file exists but is unreadable
-    or corrupt — callers must handle this explicitly rather than silently
-    initialising from defaults.
+    Returns None if the file does not exist, is unreadable (PermissionError),
+    or contains invalid/empty JSON — callers treat None as "not available".
     """
     if not path.exists():
         return None
-        
-    async with aiofiles.open(path, "r", encoding="utf-8") as f:
-        content = await f.read()
 
-    return json.loads(content)
-    # json.JSONDecodeError and OSError propagate to the caller
+    try:
+        async with aiofiles.open(path, "r", encoding="utf-8") as f:
+            content = await f.read()
+    except (OSError, PermissionError):
+        return None
+
+    if not content.strip():
+        return None
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return None
+

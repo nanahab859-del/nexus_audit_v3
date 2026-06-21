@@ -136,7 +136,9 @@ async def _handle_export(ctx, params):
     path   = params.get("path")
     if path:
         import pathlib
-        pathlib.Path(path).write_text(json.dumps(config, indent=2, default=str))
+        import asyncio
+        content = json.dumps(config, indent=2, default=str)
+        await asyncio.to_thread(pathlib.Path(path).write_text, content)
         ctx.write(f"Exported to {path}")
     else:
         ctx.write_json(config)

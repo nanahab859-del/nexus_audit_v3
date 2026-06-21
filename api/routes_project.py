@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 from aiohttp import web
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 async def ping_project(request: web.Request) -> web.Response:
@@ -22,8 +25,9 @@ async def ping_project(request: web.Request) -> web.Response:
     """
     try:
         body = await request.json()
-    except Exception:
-        return web.json_response({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        logger.warning("routes_project request failed: %s", e, exc_info=True)
+        return web.json_response({"error": str(e)}, status=400)
 
     raw_path = (body.get("path") or "").strip()
     if not raw_path:

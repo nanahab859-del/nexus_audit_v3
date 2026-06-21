@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from orchestrator import Orchestrator
 from core.primitives.models import Job, JobState, Finding, Severity, Category
 from core.primitives.settings import SettingsManager
-from core.primitives.events import EventBus
+from core.primitives.events import EventBus, EventType
 
 
 @pytest.fixture
@@ -23,6 +23,7 @@ def orchestrator(tmp_path, monkeypatch):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     
     sm = SettingsManager()
+    (tmp_path / "src").mkdir(parents=True, exist_ok=True)
     proj = asyncio.run(sm.register_project("test-project", str(tmp_path / "src")))
     
     orch = Orchestrator(sm)
@@ -47,7 +48,7 @@ class TestOrchestratorInitialization:
         assert orch.bus is not None
         assert isinstance(orch.bus, EventBus)
         
-        job = orch.current_job()
+        job = orch.current_job
         assert job is None
         
         status = orch.status()
@@ -77,7 +78,7 @@ class TestJobLifecycle:
         
         job = await orch.start_job(proj.id)
         
-        current = orch.current_job()
+        current = orch.current_job
         assert current is not None
         assert current.id == job.id
         assert current.state == JobState.RUNNING
@@ -123,7 +124,7 @@ class TestJobLifecycle:
         
         # Status should reflect cancellation (or allow some time for it)
         # The actual state might be CANCELLED or RUNNING depending on timing
-        current = orch.current_job()
+        current = orch.current_job
         assert current is not None
 
 
@@ -137,10 +138,12 @@ class TestEventBusPublishing:
         
         events = []
         
-        def capture_status(status, job_id):
+        async def capture_status(event):
+            status = event.payload.get("state")
+            job_id = event.payload.get("job_id")
             events.append(("status", status, job_id))
         
-        orch.bus.subscribe("status", capture_status)
+        await orch.bus.subscribe(EventType.STATUS, capture_status)
         
         job = await orch.start_job(proj.id)
         
@@ -157,10 +160,12 @@ class TestEventBusPublishing:
         
         logs = []
         
-        def capture_log(level, msg):
+        async def capture_log(event):
+            level = event.payload.get("level")
+            msg = event.payload.get("message")
             logs.append((level, msg))
         
-        orch.bus.subscribe("log", capture_log)
+        await orch.bus.subscribe(EventType.LOG, capture_log)
         
         job = await orch.start_job(proj.id)
         

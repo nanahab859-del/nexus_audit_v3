@@ -28,14 +28,14 @@ class CommandContext:
     stdout_buffer:    List[str] = field(default_factory=list)
     has_error:        bool = False
     privilege_level:  int  = OPERATOR
-    workspace_dirty:  bool = False   # set True by mutating handlers so CLI knows to resync
-    exit_requested:   bool = False   # set True by the exit handler
-    orchestrator:     Optional[Any] = None   # injected Orchestrator instance
+    workspace_dirty:  bool = False
+    exit_requested:   bool = False
+    orchestrator:     Optional[Any] = None
 
-    # ── Output accumulation — NO side effects, NO terminal I/O ────────────────
+    # ── Buffered output (rendered by CLI after command returns) ────────────────
 
     def write(self, text: str) -> None:
-        """Append a line to the output buffer."""
+        """Append a line to the output buffer. Rendered after command returns."""
         self.stdout_buffer.append(str(text))
 
     def write_error(self, text: str) -> None:
@@ -51,3 +51,25 @@ class CommandContext:
     def mark_dirty(self) -> None:
         """Call from any handler that mutates workspace or active project."""
         self.workspace_dirty = True
+
+    # ── Live / streaming output (bypasses buffer for real-time display) ────────
+
+    def write_live(self, text: str) -> None:
+        """
+        Write immediately to the terminal AND to the buffer.
+
+        Use ONLY for long-running streaming commands (log:stream, audit:run
+        --follow) where the handler never returns until cancelled. Normal
+        commands must use write() so the CLI controls rendering timing.
+        """
+        import click
+        self.stdout_buffer.append(str(text))
+        click.echo(str(text))
+
+    def write_live_error(self, text: str) -> None:
+        """Live write for error lines in streaming contexts."""
+        import click
+        self.has_error = True
+        line = f"[ERROR] {text}"
+        self.stdout_buffer.append(line)
+        click.secho(line, fg="red", bold=True)

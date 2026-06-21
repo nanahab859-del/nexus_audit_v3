@@ -1,5 +1,6 @@
 from pathlib import Path
 from core.primitives.commands.context import READONLY, ADMIN
+from core.primitives.commands.handlers._utils import resolve_project_id
 
 
 def register(registry) -> None:
@@ -29,7 +30,7 @@ def register(registry) -> None:
 
     registry.register(Command(
         name="project:info",
-        description="Show details for a project.",
+        description="Show details for a project. Accepts full UUID or 8-char prefix.",
         usage="project:info [project_id]",
         handler=_handle_info,
         required_privilege=READONLY,
@@ -38,7 +39,7 @@ def register(registry) -> None:
 
     registry.register(Command(
         name="project:delete",
-        description="Delete a registered project by ID.",
+        description="Delete a registered project. Accepts full UUID or 8-char prefix.",
         usage="project:delete <project_id>",
         handler=_handle_delete,
         required_privilege=ADMIN,
@@ -58,9 +59,11 @@ def register(registry) -> None:
 async def _handle_register(ctx, params):
     path = str(Path(params["path"]).expanduser().resolve())
     name = params["name"]
-    await ctx.settings_manager.register_project(name, path)
+    proj = await ctx.settings_manager.register_project(name, path)
     ctx.mark_dirty()
     ctx.write(f"Project '{name}' registered at {path}")
+    ctx.write(f"  ID prefix : {proj.id[:8]}")
+    ctx.write(f"  Activate  : workspace:active {proj.id[:8]}")
 
 
 async def _handle_list(ctx, params):
@@ -68,38 +71,54 @@ async def _handle_list(ctx, params):
         ctx.write("No projects registered.")
         return
     active_id = ctx.workspace.active_project_id
+    ctx.write(f"  {'ID':<10} {'NAME':<24} PATH")
+    ctx.write(f"  {'─'*10} {'─'*24} {'─'*40}")
     for pid, proj in ctx.workspace.projects.items():
         marker = " *" if pid == active_id else "  "
         ctx.write(f"{marker} {pid[:8]}  {proj.name:<24}  {proj.path}")
+    ctx.write("")
+    ctx.write("Use 'workspace:active <ID>' with the 8-char prefix shown above.")
 
 
 async def _handle_info(ctx, params):
-    pid = params.get("project_id") or (ctx.active_project.id if ctx.active_project else None)
-    if not pid:
+    raw = params.get("project_id")
+
+    if raw:
+        # Resolve the prefix to a full UUID
+        full_pid = resolve_project_id(ctx, raw)
+        if full_pid is None:
+            return   # error already written
+    elif ctx.active_project:
+        full_pid = ctx.active_project.id
+    else:
         ctx.write_error("Provide a project_id or set an active project.")
         return
+
     try:
-        proj = await ctx.settings_manager.load_project(pid)
+        proj = await ctx.settings_manager.load_project(full_pid)
     except FileNotFoundError:
-        ctx.write_error(f"Project '{pid}' not found.")
+        ctx.write_error(f"Project '{full_pid[:8]}' not found.")
         return
-    history_dir = Path.home() / ".nexus_audit" / "projects" / pid / "jobs"
+
+    history_dir = Path.home() / ".nexus_audit" / "projects" / full_pid / "jobs"
     job_count   = sum(1 for _ in history_dir.iterdir()) if history_dir.exists() else 0
+
     ctx.write(f"Name       : {proj.name}")
-    ctx.write(f"ID         : {pid}")
+    ctx.write(f"ID         : {full_pid}")
     ctx.write(f"Path       : {proj.path}")
     ctx.write(f"Scanners   : {len(proj.settings.scanners)}")
     ctx.write(f"Audit runs : {job_count}")
 
 
 async def _handle_delete(ctx, params):
-    pid = params["project_id"]
-    if pid not in ctx.workspace.projects:
-        ctx.write_error(f"Project '{pid}' not found.")
-        return
-    await ctx.settings_manager.delete_project(pid)
+    full_pid = resolve_project_id(ctx, params["project_id"])
+    if full_pid is None:
+        return   # error already written
+
+    name = ctx.workspace.projects[full_pid].name
+    await ctx.settings_manager.delete_project(full_pid)
     ctx.mark_dirty()
-    ctx.write(f"Project '{pid}' deleted.")
+    ctx.write(f"Project '{name}' ({full_pid[:8]}) deleted.")
 
 
 async def _handle_clear(ctx, params):

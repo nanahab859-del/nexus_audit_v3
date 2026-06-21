@@ -80,10 +80,10 @@ async def test_evaluate_ghost():
     
     dna = ProjectDNA(
         modules={
-            "src/app/used.py": ModuleEntry("src.app.used", Path("src/app/used.py"), "src/app/used.py", "app", {}, [], False, 10, "python"),
-            "src/app/ghost.py": ModuleEntry("src.app.ghost", Path("src/app/ghost.py"), "src/app/ghost.py", "app", {}, [], False, 10, "python"),
-            "src/app/wrong_lang.js": ModuleEntry("src.app.wrong_lang", Path("src/app/wrong_lang.js"), "src/app/wrong_lang.js", "app", {}, [], False, 10, "javascript"),
-            "src/main.py": ModuleEntry("src.main", Path("src/main.py"), "src/main.py", "main", {"src.app.used": 1}, [], False, 10, "python")
+            "src.app.used": ModuleEntry("src.app.used", Path("src/app/used.py"), "src/app/used.py", "app", {}, [], False, 10, "python"),
+            "src.app.ghost": ModuleEntry("src.app.ghost", Path("src/app/ghost.py"), "src/app/ghost.py", "app", {}, [], False, 10, "python"),
+            "src.app.wrong_lang": ModuleEntry("src.app.wrong_lang", Path("src/app/wrong_lang.js"), "src/app/wrong_lang.js", "app", {}, [], False, 10, "javascript"),
+            "src.main": ModuleEntry("src.main", Path("src/main.py"), "src/main.py", "main", {"src.app.used": 1}, [], False, 10, "python")
         },
         apps=["app", "main"],
         physical_files=[

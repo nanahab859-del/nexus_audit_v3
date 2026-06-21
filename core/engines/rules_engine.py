@@ -75,7 +75,21 @@ class RulesEngine:
                     
             self._scoring_config = data.get("scoring_config", {})
             self._communication_config = data.get("communication_config", {})
-            self._app_definitions = data.get("app_definitions", [])
+            
+            raw_apps = data.get("app_definitions", [])
+            if isinstance(raw_apps, dict):
+                self._app_definitions = []
+                for name, cfg in raw_apps.items():
+                    app_cfg = dict(cfg) if cfg else {}
+                    app_cfg["name"] = name
+                    if "is_hub" in app_cfg and "hub" not in app_cfg:
+                        app_cfg["hub"] = app_cfg["is_hub"]
+                    self._app_definitions.append(app_cfg)
+            else:
+                self._app_definitions = raw_apps
+                for app_cfg in self._app_definitions:
+                    if isinstance(app_cfg, dict) and "is_hub" in app_cfg and "hub" not in app_cfg:
+                        app_cfg["hub"] = app_cfg["is_hub"]
             
         except Exception as e:
             logger.warning(f"Failed to load rules: {e}")
@@ -125,7 +139,7 @@ class RulesEngine:
                 elif rule.type == "pattern":
                     violations.extend(self._evaluate_pattern(rule, dna))
                 elif rule.type == "regex":
-                    violations.extend(self._evaluate_regex(rule, dna))
+                    violations.extend(await self._evaluate_regex(rule, dna))
                 elif rule.type == "cycle":
                     violations.extend(self._evaluate_cycle(rule, dna))
                 elif rule.type == "boundary":
@@ -208,7 +222,7 @@ class RulesEngine:
         )
         return []
 
-    def _evaluate_regex(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
+    async def _evaluate_regex(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
         pattern_str = rule.config.get("pattern")
         if not pattern_str:
             logger.warning("Rule %s: missing 'pattern' in config", rule.id)
@@ -228,7 +242,9 @@ class RulesEngine:
                 continue
 
             try:
-                source = mod.file_path.read_text(encoding="utf-8", errors="replace")
+                source = await asyncio.to_thread(
+                    mod.file_path.read_text, encoding="utf-8", errors="replace"
+                )
             except OSError:
                 continue
 

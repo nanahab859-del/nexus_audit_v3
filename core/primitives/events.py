@@ -7,7 +7,7 @@ Provides publish/subscribe with:
   - Token-based subscription and unsubscription
   - Safe notification: subscriber errors are caught and logged, never propagate
   - Support for both sync and async subscriber callbacks
-  - Lock-guarded subscriber list mutations
+  - Lock-guarded subscriber list mutations (subscribe/unsubscribe are async)
 """
 from __future__ import annotations
 
@@ -46,6 +46,9 @@ class EventBus:
     Subscribers register callbacks (sync or async). On publish, all registered
     callbacks for the event type are called concurrently via asyncio.gather.
     Errors in one subscriber do not affect others.
+
+    subscribe(), subscribe_all(), and unsubscribe() are all async so they can
+    be lock-guarded without blocking the event loop.
     """
 
     def __init__(self, history_size: int = 5000) -> None:
@@ -81,9 +84,9 @@ class EventBus:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    # ── Subscribe / unsubscribe ────────────────────────────────────────────────
+    # ── Subscribe / unsubscribe (async + lock-guarded) ─────────────────────────
 
-    def subscribe(
+    async def subscribe(
         self,
         event_type: EventType,
         callback: Callable,
@@ -92,34 +95,44 @@ class EventBus:
         Register a callback for a specific event type.
         Accepts both sync and async callables.
         Returns an opaque token for later unsubscription.
+        Must be awaited: token = await bus.subscribe(EventType.LOG, my_fn)
         """
         token = str(uuid.uuid4())
-        self._subscribers[event_type].append(callback)
-        self._tokens[token] = (event_type, callback)
+        async with self._lock:
+            self._subscribers[event_type].append(callback)
+            self._tokens[token] = (event_type, callback)
         return token
 
-    def subscribe_all(self, callback: Callable) -> str:
-        """Register a callback that receives every event regardless of type."""
+    async def subscribe_all(self, callback: Callable) -> str:
+        """
+        Register a callback that receives every event regardless of type.
+        Must be awaited: token = await bus.subscribe_all(my_fn)
+        """
         token = str(uuid.uuid4())
-        self._all_subscribers.append(callback)
-        self._tokens[token] = (None, callback)
+        async with self._lock:
+            self._all_subscribers.append(callback)
+            self._tokens[token] = (None, callback)
         return token
 
-    def unsubscribe(self, token: str) -> None:
-        """Remove the subscriber associated with the given token."""
-        if token not in self._tokens:
-            return
-        event_type, callback = self._tokens.pop(token)
-        if event_type is None:
-            try:
-                self._all_subscribers.remove(callback)
-            except ValueError:
-                pass
-        else:
-            try:
-                self._subscribers[event_type].remove(callback)
-            except ValueError:
-                pass
+    async def unsubscribe(self, token: str) -> None:
+        """
+        Remove the subscriber associated with the given token.
+        Must be awaited: await bus.unsubscribe(token)
+        """
+        async with self._lock:
+            if token not in self._tokens:
+                return
+            event_type, callback = self._tokens.pop(token)
+            if event_type is None:
+                try:
+                    self._all_subscribers.remove(callback)
+                except ValueError:
+                    pass
+            else:
+                try:
+                    self._subscribers[event_type].remove(callback)
+                except ValueError:
+                    pass
 
     def get_history(self, since_id: int = 0) -> List[Tuple[int, Event]]:
         """Return all events with sequence ID greater than since_id."""
@@ -144,15 +157,14 @@ class EventBus:
         await self.publish(EventType.LOG, {"level": level, "message": message})
 
     async def publish_finding(self, finding) -> None:
-        """Publish a single finding. For multiple findings use publish_finding_batch."""
+        """Publish a single finding. For bulk use publish_finding_batch."""
         from core.primitives.models import to_dict
         await self.publish(EventType.FINDING, {"finding": to_dict(finding)})
 
     async def publish_finding_batch(self, findings: list) -> None:
         """
         Publish multiple findings in one event.
-        Use this at the end of a scanner run instead of publish_finding() in a loop.
-        Reduces the number of asyncio.gather() fan-outs for high-volume scans.
+        Reduces asyncio.gather() fan-outs for high-volume scans.
         """
         from core.primitives.models import to_dict
         await self.publish(
@@ -165,7 +177,7 @@ class EventBus:
     async def _safe_notify(self, callback: Callable, event: Event) -> None:
         """
         Call a subscriber callback safely.
-        Accepts both sync and async callbacks — checks for coroutine before awaiting.
+        Handles both sync and async callbacks — checks iscoroutine before awaiting.
         Errors are caught and logged; they never propagate to the publisher.
         """
         try:
@@ -173,7 +185,7 @@ class EventBus:
             if asyncio.iscoroutine(result):
                 await result
         except Exception as e:
-            logger.warning(f"Subscriber error in EventBus callback: {e}")
+            logger.warning("EventBus subscriber error: %s", e)
 
     async def _safe_notify_all(
         self,
@@ -186,4 +198,4 @@ class EventBus:
             if asyncio.iscoroutine(result):
                 await result
         except Exception as e:
-            logger.warning(f"EventBus global subscriber raised an error: {e}")
+            logger.warning("EventBus global subscriber error: %s", e)

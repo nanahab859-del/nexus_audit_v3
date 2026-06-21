@@ -31,7 +31,7 @@ def dummy_bus():
     (BanditScanner, json.dumps({"results": []})),
     (VultureScanner, ""),
     (SemgrepScanner, json.dumps({"results": []})),
-    (SafetyScanner, json.dumps({"dependencies": []})),
+    (PipAuditScanner, json.dumps({"dependencies": []})),
     (RadonScanner, json.dumps({})),
     (LizardScanner, "1,2,3,4,5,6,app.py,long_func,long_func,10,120\n"),
     (PylintScanner, json.dumps([])),
@@ -63,7 +63,7 @@ async def test_all_scanners_scan(scanner_cls, test_output, dummy_bus, tmp_path):
             assert isinstance(findings, list)
             if scanner_cls != GenericScriptScanner:
                 mock_check.assert_called_once()
-            mock_run.assert_called_once()
+                mock_run.assert_called_once()
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("scanner_cls, test_output", [

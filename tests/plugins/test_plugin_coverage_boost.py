@@ -3,7 +3,7 @@ import json
 from core.primitives.models import Severity
 from plugins.architecture.lizard_plugin import LizardScanner
 from plugins.dependency.license_plugin import LicenseAuditScanner
-from plugins.dependency.safety_plugin import SafetyScanner
+from plugins.dependency.safety_plugin import PipAuditScanner
 from plugins.generic_script_scanner import GenericScriptScanner
 from plugins.security.django_settings_plugin import DjangoSettingsScanner
 from plugins.security.secretscrub_plugin import SecretScrubScanner
@@ -31,7 +31,7 @@ def test_license_audit_parsing_clean():
     assert len(findings) == 0
 
 def test_safety_parsing_no_vulns():
-    scanner = SafetyScanner({}, DummyBus())
+    scanner = PipAuditScanner({}, DummyBus())
     output = json.dumps({"dependencies": [{"name": "django", "version": "2.0", "vulns": []}]})
     findings = scanner._parse_output(output)
     assert len(findings) == 0
@@ -127,8 +127,8 @@ async def test_bandit_args_and_scan(tmp_path):
 
 @pytest.mark.asyncio
 async def test_safety_args_and_scan(tmp_path):
-    from plugins.dependency.safety_plugin import SafetyScanner
-    scanner = SafetyScanner({}, DummyBus())
+    from plugins.dependency.safety_plugin import PipAuditScanner
+    scanner = PipAuditScanner({}, DummyBus())
     
     req_file = tmp_path / "requirements.txt"
     req_file.write_text("django==3.0")

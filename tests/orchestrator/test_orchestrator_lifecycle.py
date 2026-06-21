@@ -18,6 +18,9 @@ def mock_settings_manager():
     project.settings.rules_file = "rules.yaml"
     project.settings.history_dir = "/tmp/history"
     
+    project.path = "/tmp"
+    
+    sm.get_project = MagicMock(side_effect=KeyError("Not found"))
     sm.load_project.return_value = project
     return sm
 
@@ -59,7 +62,7 @@ async def test_start_job_while_running_raises(orchestrator, mock_settings_manage
     with patch.object(orchestrator, "_run_job", new_callable=AsyncMock) as mock_run:
         await orchestrator.start_job("test-project-id")
         
-        with pytest.raises(RuntimeError, match="An audit is already running"):
+        with pytest.raises(RuntimeError, match="A job is already running"):
             await orchestrator.start_job("test-project-id")
 
 @pytest.mark.asyncio
@@ -101,13 +104,13 @@ async def test_cancel_job_effect(orchestrator, mock_settings_manager):
         assert job.state == JobState.CANCELLED
 
 def test_current_job_returns_none_initially(orchestrator):
-    assert orchestrator.current_job() is None
+    assert orchestrator.current_job is None
 
 @pytest.mark.asyncio
 async def test_current_job_returns_job_after_start(orchestrator, mock_settings_manager):
     with patch.object(orchestrator, "_run_job", new_callable=AsyncMock) as mock_run:
         job = await orchestrator.start_job("test-project-id")
         
-        current = orchestrator.current_job()
+        current = orchestrator.current_job
         assert current is not None
         assert current.id == job.id

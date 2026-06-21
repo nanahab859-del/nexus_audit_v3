@@ -1,4 +1,5 @@
 from core.primitives.commands.context import READONLY, ADMIN
+from core.primitives.commands.handlers._utils import resolve_project_id
 
 
 def register(registry) -> None:
@@ -15,7 +16,7 @@ def register(registry) -> None:
 
     registry.register(Command(
         name="workspace:active",
-        description="Set the active project by ID.",
+        description="Set the active project by ID or 8-char prefix.",
         usage="workspace:active <project_id>",
         handler=_handle_active,
         required_privilege=ADMIN,
@@ -29,12 +30,14 @@ async def _handle_status(ctx, params):
 
 
 async def _handle_active(ctx, params):
-    pid = params["project_id"]
-    if pid not in ctx.workspace.projects:
-        ctx.write_error(f"Project '{pid}' is not registered.")
-        return
-    await ctx.settings_manager.set_active_project(pid)
-    ctx.workspace.active_project_id = pid
-    ctx.active_project = await ctx.settings_manager.load_project(pid)
+    # resolve_project_id handles exact UUID, 8-char prefix, and ambiguous prefix
+    full_pid = resolve_project_id(ctx, params["project_id"])
+    if full_pid is None:
+        return   # error already written by resolve_project_id
+
+    await ctx.settings_manager.set_active_project(full_pid)
+    ctx.workspace.active_project_id = full_pid
+    ctx.active_project = await ctx.settings_manager.load_project(full_pid)
     ctx.mark_dirty()
-    ctx.write(f"Active project set to '{pid}'.")
+    proj_name = ctx.workspace.projects[full_pid].name
+    ctx.write(f"Active project set to '{proj_name}' ({full_pid[:8]}).")

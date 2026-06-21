@@ -24,10 +24,10 @@ def dna():
         )
     return ProjectDNA(
         modules={
-            "app1.modA": create_mod("app1/modA.py", "app1", [], 10),
+            "app1.__init__": create_mod("app1/__init__.py", "app1", [], 10),
         },
         apps=["app1"],
-        physical_files=["app1/modA.py"],
+        physical_files=["app1/__init__.py"],
         built_at=datetime.now(timezone.utc),
         project_root=Path("/")
     )
@@ -40,7 +40,7 @@ def test_perfect_score(dna):
 def test_violation_penalty(dna):
     bus = EventBus()
     findings = [
-        Finding("1", "rule1", "s1", "app1/modA.py", 1, 1, Severity.MEDIUM, Category.ARCHITECTURE, "T", "D")
+        Finding("1", "rule1", "s1", "app1/__init__.py", 1, 1, Severity.MEDIUM, Category.ARCHITECTURE, "T", "D")
     ]
     scores, avg = calculate_scores(dna, findings, set(), {"violation_default": 5.0}, bus)
     assert scores["app1"].score == 95
@@ -49,7 +49,7 @@ def test_clamp_to_zero(dna):
     bus = EventBus()
     # Massive penalty
     findings = [
-        Finding(str(i), "r", "s", "app1/modA.py", 1, 1, Severity.CRITICAL, Category.ARCHITECTURE, "T", "D")
+        Finding(str(i), "r", "s", "app1/__init__.py", 1, 1, Severity.CRITICAL, Category.ARCHITECTURE, "T", "D")
         for i in range(100)
     ]
     scores, avg = calculate_scores(dna, findings, set(), {"violation_default": 5.0}, bus)
@@ -59,11 +59,11 @@ def test_fleet_average_weighted(tmp_path):
     # Two apps with different LOC
     dna = ProjectDNA(
         modules={
-            "app1.modA": ModuleEntry("app1.modA", Path("app1/modA.py"), "app1/modA.py", "app1", {}, [], False, 100, "python", "ok", False),
-            "app2.modB": ModuleEntry("app2.modB", Path("app2/modB.py"), "app2/modB.py", "app2", {}, [], False, 10, "python", "ok", False),
+            "app1.__init__": ModuleEntry("app1.__init__", Path("app1/__init__.py"), "app1/__init__.py", "app1", {}, [], False, 100, "python", "ok", False),
+            "app2.__init__": ModuleEntry("app2.__init__", Path("app2/__init__.py"), "app2/__init__.py", "app2", {}, [], False, 10, "python", "ok", False),
         },
         apps=["app1", "app2"],
-        physical_files=["app1/modA.py", "app2/modB.py"],
+        physical_files=["app1/__init__.py", "app2/__init__.py"],
         built_at=datetime.now(timezone.utc),
         project_root=Path("/")
     )

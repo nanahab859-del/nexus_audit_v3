@@ -24,7 +24,7 @@ async def stream(request: web.Request) -> web.Response:
 
     # Fix 8: subscribe_all is synchronous — do NOT await it.
     # It returns an opaque token used for unsubscription.
-    token = bus.subscribe_all(on_event)
+    token = await bus.subscribe_all(on_event)
 
     try:
         last_id_str = request.headers.get("Last-Event-ID", "0")
@@ -57,6 +57,6 @@ async def stream(request: web.Request) -> web.Response:
     finally:
         # Fix 9: unsubscribe via token — not a non-existent unsubscribe_all.
         # unsubscribe is also synchronous.
-        bus.unsubscribe(token)
+        await bus.unsubscribe(token)
 
     return response

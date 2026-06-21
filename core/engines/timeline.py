@@ -27,8 +27,12 @@ async def load_score_history(
     if not history_dir.exists():
         return history_data
 
-    # Gather files
-    files = sorted([f for f in history_dir.glob("*/audit_summary.json")], key=lambda x: x.stat().st_mtime, reverse=True)
+    # Gather files — accept both audit_summary.json in subdirs and audit_summary_*.json directly
+    files = sorted(
+        list(history_dir.glob("*/audit_summary.json")) + list(history_dir.glob("audit_summary*.json")),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True
+    )
     
     # Take max_runs
     files = files[:max_runs]
@@ -66,7 +70,7 @@ async def compute_violation_persistence(
         return [replace(f, persistence=Persistence.NEW) for f in current_findings]
         
     files = sorted(
-        [f for f in history_dir.glob("*/audit_summary.json")],
+        list(history_dir.glob("*/audit_summary.json")) + list(history_dir.glob("audit_summary*.json")),
         key=lambda x: x.stat().st_mtime,
         reverse=True,
     )[:max_runs]

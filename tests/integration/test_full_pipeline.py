@@ -67,7 +67,7 @@ REQUIRED_SCHEMA_KEYS = {
 }
 
 VALID_SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"}
-VALID_CATEGORIES = {"security", "quality", "performance", "dependency", "architecture"}
+VALID_CATEGORIES = {"SECURITY", "QUALITY", "PERFORMANCE", "DEPENDENCY", "ARCHITECTURE"}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Logging bootstrap — project-root log file + pytest live capture
@@ -109,7 +109,7 @@ def _log(msg: str, level: str = "info") -> None:
 # Shared helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _attach_event_streaming(bus: EventBus) -> None:
+async def _attach_event_streaming(bus: EventBus) -> None:
     """Subscribe to ALL bus events and stream them to the log file."""
 
     async def _on_event(event_id: int, event) -> None:
@@ -119,7 +119,7 @@ def _attach_event_streaming(bus: EventBus) -> None:
             level="debug",
         )
 
-    bus.subscribe_all(_on_event)
+    await bus.subscribe_all(_on_event)
 
 
 async def _run_audit_and_wait(
@@ -141,7 +141,7 @@ async def _run_audit_and_wait(
             final_state["state"] = state
             done_event.set()
 
-    orch.bus.subscribe(EventType.STATUS, on_status)
+    await orch.bus.subscribe(EventType.STATUS, on_status)
 
     t0 = time.monotonic()
     job = await orch.start_job(project_id)
@@ -175,7 +175,7 @@ async def _run_audit_and_wait(
 async def _build_orchestrator(sm: SettingsManager, project_id: str) -> Orchestrator:
     """Create a fresh Orchestrator with event streaming attached."""
     orch = Orchestrator(sm)
-    _attach_event_streaming(orch.bus)
+    await _attach_event_streaming(orch.bus)
     return orch
 
 
@@ -460,7 +460,7 @@ class TestFullPipeline:
                 final_state["state"] = state
                 done_event.set()
 
-        orch3.bus.subscribe(EventType.STATUS, on_status)
+        await orch3.bus.subscribe(EventType.STATUS, on_status)
 
         job3 = await orch3.start_job(registered_project_id)
         _log(f"[TC10] job started  job_id={job3.id}  — cancelling immediately")
