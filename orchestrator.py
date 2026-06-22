@@ -24,6 +24,7 @@ from core.engines.scoring_engine import calculate_scores
 from core.engines.coupling import build_coupling_matrix
 from core.engines.timeline import load_score_history, compute_violation_persistence
 from core.engines.fix_queue import FixQueue
+from core.infra.audit_index import upsert_run
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,7 @@ class Orchestrator:
                 output_dir / "audit_summary.json",
                 self._build_summary(result_data), indent=2
             )
+            await upsert_run(project_id, self._build_summary(result_data), output_dir)
 
             # COMPLETE
             job.state       = JobState.COMPLETED

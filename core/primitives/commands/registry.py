@@ -114,7 +114,7 @@ class CommandRegistry:
         """
         from core.primitives.commands.handlers import (
             workspace, project, audit, config,
-            scanner, fix, report, system, log, ai,
+            scanner, fix, report, system, log, ai, index_ext,
         )
         workspace.register(self)
         project.register(self)
@@ -126,3 +126,4 @@ class CommandRegistry:
         system.register(self)
         log.register(self)
         ai.register(self)
+        index_ext.register(self)
