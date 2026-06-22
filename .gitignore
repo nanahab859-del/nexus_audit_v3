@@ -25,7 +25,6 @@ lod/audit_data_complete.json
 *.sqlite
 *.bak
 *.backup
-docs/
 .coverage
 .coverage-*
 *.sh

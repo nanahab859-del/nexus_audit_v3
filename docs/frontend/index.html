@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Audit V3 – Test</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <h1>Nexus Audit V3</h1>
+            <p style="color:var(--text-secondary);">Project Dashboard</p>
+        </div>
+        <div id="control-panel" class="control-panel">
+            <button id="run-btn" class="primary-btn">▶ Run Audit</button>
+        </div>
+        <div id="progress-panel" style="display:none;">
+            <h2>Live Progress</h2>
+            <div id="audit-log-wrapper">
+                <pre id="log-output"></pre>
+            </div>
+            <div id="scanner-progress"></div>
+        </div>
+        <h2>📊 Findings</h2>
+        <div id="data-output" style="margin-top:20px;">Click 'Run Audit' to start.</div>
+    </div>
+    <script type="module">
+        // inlined module: stream, dashboard, main
+        function connectStream(onProgress, onLog, onStatus) {
+            const es = new EventSource('/api/stream');
+            es.addEventListener('progress', (e) => {
+                const d = JSON.parse(e.data);
+                onProgress(d.scanner, d.percent, d.file);
+            });
+            es.addEventListener('log', (e) => {
+                const d = JSON.parse(e.data);
+                onLog(d.level, d.message);
+            });
+            es.addEventListener('status', (e) => {
+                const d = JSON.parse(e.data);
+                onStatus(d.state, d.job_id);
+                if (d.state === 'completed') es.close();
+            });
+            es.onerror = () => {};
+            return es;
+        }
+
+        function renderFindingsTable(data) {
+            const scanResults = data.scan_results || [];
+            let allFindings = [];
+            for (const sr of scanResults) {
+                const scanner = sr.scanner;
+                for (const f of sr.findings || []) {
+                    allFindings.push({ ...f, scanner });
+                }
+            }
+            if (allFindings.length === 0) return '<p>No findings.</p>';
+
+            let html = '<table><thead><tr><th>Severity</th><th>Scanner</th><th>Title</th><th>File</th><th>Line</th></tr></thead><tbody>';
+            for (const f of allFindings) {
+                html += `<tr>` +
+                    `<td>${f.severity}</td>` +
+                    `<td>${f.scanner}</td>` +
+                    `<td>${f.title}</td>` +
+                    `<td>${f.file}</td>` +
+                    `<td>${f.line}</td>` +
+                `</tr>`;
+            }
+            html += '</tbody></table>';
+            return html;
+        }
+
+        async function loadInitialData() {
+            try {
+                const resp = await fetch('/api/data');
+                if (resp.ok) {
+                    const data = await resp.json();
+                    document.getElementById('data-output').innerHTML = renderFindingsTable(data);
+                }
+            } catch (e) {
+                console.error('Error loading initial data:', e);
+            }
+        }
+
+        async function runAudit() {
+            try {
+                const resp = await fetch('/api/run', { method: 'POST' });
+                const result = await resp.json();
+                const job_id = result.job_id || result.id;
+                document.getElementById('progress-panel').style.display = 'block';
+                document.getElementById('log-output').textContent = '';
+                document.getElementById('scanner-progress').textContent = 'Starting...';
+
+                connectStream(
+                    (scanner, percent, file) => {
+                        document.getElementById('scanner-progress').textContent = `${scanner}: ${percent}% (${file})`;
+                    },
+                    (level, message) => {
+                        const logEl = document.getElementById('log-output');
+                        logEl.textContent += message + '\n';
+                        logEl.scrollTop = logEl.scrollHeight;
+                    },
+                    async (state) => {
+                        if (state === 'completed') {
+                            const dataResp = await fetch('/api/data');
+                            const data = await dataResp.json();
+                            document.getElementById('data-output').innerHTML = renderFindingsTable(data);
+                            document.getElementById('progress-panel').style.display = 'none';
+                        }
+                    }
+                );
+            } catch (err) {
+                alert('Error starting audit: ' + err.message);
+            }
+        }
+
+        document.getElementById('run-btn').addEventListener('click', runAudit);
+        window.addEventListener('DOMContentLoaded', loadInitialData);
+    </script>
+</body>
+</html>
