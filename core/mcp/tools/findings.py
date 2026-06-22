@@ -1,78 +1,176 @@
 import json
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 from fastmcp import FastMCP
-from core.mcp.security import _assert_safe_path
+from core.mcp.schemas import (
+    FindingDetailInput, ListFindingsInput, FileContextInput,
+    FixQueueInput, TrendInput, DiffInput, _assert_safe_path, resolve_project_id
+)
+from core.mcp.locks import project_lock
 
 def register(mcp: FastMCP):
     @mcp.tool()
-    def get_finding_detail(project_id: str, job_id: str, fingerprint: str) -> dict:
+    def get_finding_detail(input: FindingDetailInput) -> dict:
         """Reads the detail of a specific finding from audit_data_complete.json."""
         try:
-            complete_path = _assert_safe_path(str(Path.home() / ".nexus_audit" / "projects" / project_id / "jobs" / job_id / "audit_data_complete.json"))
-            if not complete_path.exists():
-                return {"error": "Job data not found"}
-            with open(complete_path, "r") as f:
-                data = json.load(f)
-            for finding in data.get("findings", []):
-                if finding.get("fingerprint") == fingerprint:
-                    return finding
+            base_dir = Path.home() / ".nexus_audit" / "projects"
+            if not base_dir.exists():
+                return {"error": "No projects found"}
+                
+            for project_dir in base_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                jobs_dir = project_dir / "jobs"
+                if not jobs_dir.exists():
+                    continue
+                for job_dir in jobs_dir.iterdir():
+                    complete_path = job_dir / "audit_data_complete.json"
+                    if not complete_path.exists():
+                        continue
+                    with open(complete_path, "r") as f:
+                        data = json.load(f)
+                    for finding in data.get("findings", []):
+                        if finding.get("fingerprint") == input.finding_hash:
+                            struct_ctx = finding.get("structural_context")
+                            if struct_ctx:
+                                ctx_str = json.dumps(struct_ctx)
+                                if len(ctx_str) > 4000:
+                                    finding["structural_context"] = {"truncated": True, "partial": ctx_str[:4000]}
+                                    finding["context_truncated"] = True
+                            return finding
             return {"error": "Finding not found"}
-        except ValueError as e:
-            return {"error": str(e)}
         except Exception as e:
             return {"error": str(e)}
 
     @mcp.tool()
-    def list_findings(project_id: str, job_id: str, limit: int = 100, offset: int = 0) -> List[dict]:
-        """Lists findings for a given job, capped at 100 per call."""
-        limit = min(limit, 100)
+    async def list_findings(input: ListFindingsInput) -> dict:
+        """Lists findings for a given job, filtered and capped at 100 per call."""
+        limit = min(input.limit, 100)
         try:
-            complete_path = _assert_safe_path(str(Path.home() / ".nexus_audit" / "projects" / project_id / "jobs" / job_id / "audit_data_complete.json"))
+            project_id = await resolve_project_id(input.project_path)
+            jobs_dir = _assert_safe_path(str(Path.home() / ".nexus_audit" / "projects" / project_id / "jobs"))
+            
+            if not jobs_dir.exists():
+                return {"total": 0, "returned": 0, "offset": input.offset, "findings": [], "error": "No jobs found"}
+            
+            job_id = input.run_id
+            if not job_id:
+                latest_time = 0
+                for d in jobs_dir.iterdir():
+                    if d.is_dir():
+                        mtime = d.stat().st_mtime
+                        if mtime > latest_time:
+                            latest_time = mtime
+                            job_id = d.name
+                            
+            if not job_id:
+                return {"total": 0, "returned": 0, "offset": input.offset, "findings": []}
+                
+            complete_path = jobs_dir / job_id / "audit_data_complete.json"
             if not complete_path.exists():
-                return []
+                return {"total": 0, "returned": 0, "offset": input.offset, "findings": []}
+                
             with open(complete_path, "r") as f:
                 data = json.load(f)
+                
             findings = data.get("findings", [])
-            return findings[offset:offset+limit]
-        except Exception:
-            return []
+            
+            if input.severity:
+                findings = [f for f in findings if f.get("severity", "").upper() == input.severity.upper()]
+            if input.category:
+                findings = [f for f in findings if f.get("category", "").lower() == input.category.lower()]
+            if input.status:
+                findings = [f for f in findings if f.get("status", "open").lower() == input.status.lower()]
+                
+            total = len(findings)
+            paginated = findings[input.offset : input.offset + limit]
+            
+            return {
+                "total": total,
+                "returned": len(paginated),
+                "offset": input.offset,
+                "findings": paginated
+            }
+        except Exception as e:
+            return {"total": 0, "returned": 0, "offset": input.offset, "findings": [], "error": str(e)}
 
     @mcp.tool()
-    def get_file_context(project_id: str, job_id: str, file: str) -> List[dict]:
+    async def get_file_context(input: FileContextInput) -> List[dict]:
         """Returns the snippet of code for the given file from findings context."""
         try:
-            complete_path = _assert_safe_path(str(Path.home() / ".nexus_audit" / "projects" / project_id / "jobs" / job_id / "audit_data_complete.json"))
+            project_id = await resolve_project_id(input.project_path)
+            jobs_dir = _assert_safe_path(str(Path.home() / ".nexus_audit" / "projects" / project_id / "jobs"))
+            
+            job_id = None
+            latest_time = 0
+            if jobs_dir.exists():
+                for d in jobs_dir.iterdir():
+                    if d.is_dir():
+                        mtime = d.stat().st_mtime
+                        if mtime > latest_time:
+                            latest_time = mtime
+                            job_id = d.name
+            
+            if not job_id:
+                return []
+                
+            complete_path = jobs_dir / job_id / "audit_data_complete.json"
             if not complete_path.exists():
                 return []
+                
             with open(complete_path, "r") as f:
                 data = json.load(f)
             
             context = []
             for finding in data.get("findings", []):
-                if finding.get("file") == file:
+                if finding.get("file") == input.file_path:
                     context.append({
                         "line": finding.get("line"),
                         "snippet": finding.get("snippet"),
                         "rule_id": finding.get("rule_id"),
                         "severity": finding.get("severity")
                     })
-            return context
+                    
+            return context[:input.limit]
         except Exception:
             return []
 
-    # Explicitly deferred tools
     @mcp.tool()
-    def get_fix_queue(project_id: str) -> dict:
-        """DEFERRED: Will return the fix queue for the project."""
-        return {"status": "deferred"}
+    async def get_fix_queue(input: FixQueueInput) -> dict:
+        """Returns the ranked fix queue — findings ordered by severity × age × recurrence."""
+        from core.primitives.settings import SettingsManager
+        from orchestrator import Orchestrator
+        try:
+            project_id = await resolve_project_id(input.project_path)
+            sm = SettingsManager()
+            orch = Orchestrator(sm)
+            return await orch.get_fix_queue(project_id, severity_floor=input.severity_floor, limit=input.limit)
+        except Exception as e:
+            return {"error": str(e)}
 
     @mcp.tool()
-    def get_trend(project_id: str) -> dict:
-        """DEFERRED: Will return the score trend for the project."""
-        return {"status": "deferred"}
+    async def get_trend(input: TrendInput) -> dict:
+        """Returns the score trend for the project."""
+        from core.primitives.settings import SettingsManager
+        from orchestrator import Orchestrator
+        try:
+            project_id = await resolve_project_id(input.project_path)
+            sm = SettingsManager()
+            orch = Orchestrator(sm)
+            return await orch.get_trend(project_id, last_n_runs=input.last_n_runs, branch=input.branch)
+        except Exception as e:
+            return {"error": str(e)}
 
     @mcp.tool()
-    def diff_runs(project_id: str, run_a: str, run_b: str) -> dict:
-        """DEFERRED: Will return the diff between two runs."""
-        return {"status": "deferred"}
+    async def diff_runs(input: DiffInput) -> dict:
+        """Returns the structural diff between two audit runs."""
+        from core.primitives.settings import SettingsManager
+        from orchestrator import Orchestrator
+        try:
+            project_id = await resolve_project_id(input.project_path)
+            async with project_lock(project_id):
+                sm = SettingsManager()
+                orch = Orchestrator(sm)
+                return await orch.diff_runs(project_id, run_id_a=input.run_id_a, run_id_b=input.run_id_b)
+        except Exception as e:
+            return {"error": str(e)}

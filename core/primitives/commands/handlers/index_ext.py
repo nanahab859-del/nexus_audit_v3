@@ -16,15 +16,11 @@ def register(registry) -> None:
     ))
 
 async def _handle_rebuild_index(ctx, params):
-    if not ctx.active_project:
-        ctx.write_error("No active project. Run 'workspace:active <id>' first.")
-        return
-        
-    ctx.write("Rebuilding audit index...")
+    ctx.write("Rebuilding global audit index...")
     try:
-        result = await rebuild_index(ctx.active_project.id)
+        result = await rebuild_index()
         runs = result.get("runs_indexed", 0)
-        ctx.write(f"Index rebuilt: {runs} run(s) indexed.")
+        ctx.write(f"Index rebuilt: {runs} run(s) indexed across all projects.")
     except Exception as e:
         logger.exception("Failed to rebuild index")
         ctx.write_error(f"Failed to rebuild index: {e}")
