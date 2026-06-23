@@ -268,19 +268,30 @@ class RulesEngine:
         return findings
 
     def _evaluate_cycle(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
+        """
+        Detect import cycles using iterative Tarjan's Strongly Connected Components.
+
+        Iterative (not recursive) to avoid Python's default 1000-frame recursion
+        limit crashing on large or deeply nested codebases (spec Problem A).
+        Any SCC with more than one member is a cycle.
+        """
+        from typing import Iterator
+
+        # Build adjacency restricted to modules known to ProjectDNA
         graph: Dict[str, set] = {mp: set() for mp in dna.modules}
         for mp, mod in dna.modules.items():
             for imp in mod.imports:
                 if imp in dna.modules:
                     graph[mp].add(imp)
 
-        index_counter = [0]
-        index: dict[str, int] = {}
-        lowlink: dict[str, int] = {}
-        on_stack: dict[str, bool] = {}
-        tarjan_stack: list[str] = []
-        work_stack: list[tuple[str, Any]] = []
-        sccs: list[list[str]] = []
+        # Iterative Tarjan's SCC
+        index_counter: List[int] = [0]
+        index:    Dict[str, int]  = {}
+        lowlink:  Dict[str, int]  = {}
+        on_stack: Dict[str, bool] = {}
+        tarjan_stack: List[str]                    = []
+        work_stack:   List[tuple[str, Iterator]]   = []
+        sccs: List[List[str]] = []
 
         for start in dna.modules:
             if start in index:
@@ -311,13 +322,15 @@ class RulesEngine:
                 if pushed:
                     continue
 
+                # All successors visited — pop and propagate lowlink to parent
                 work_stack.pop()
                 if work_stack:
                     parent = work_stack[-1][0]
                     lowlink[parent] = min(lowlink[parent], lowlink[node])
 
+                # SCC root: pop the component off the Tarjan stack
                 if lowlink[node] == index[node]:
-                    scc: list[str] = []
+                    scc: List[str] = []
                     while True:
                         w = tarjan_stack.pop()
                         on_stack[w] = False
@@ -327,10 +340,14 @@ class RulesEngine:
                     if len(scc) > 1:
                         sccs.append(scc)
 
-        findings: list[Finding] = []
+        # Convert SCCs to findings
+        findings: List[Finding] = []
         for scc in sccs:
             scc_sorted = sorted(scc)
 
+            # Django-models suppression: intra-app model cycles are a common
+            # Django ORM pattern, not a true architectural violation.  Emit at
+            # INFO so they are visible but not counted as errors.
             apps_in_scc = {dna.modules[m].app for m in scc if m in dna.modules}
             is_intra_app_models = (
                 len(apps_in_scc) == 1

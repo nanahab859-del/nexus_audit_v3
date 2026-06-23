@@ -2,6 +2,7 @@
 name = "nexus-audit"
 version = "0.1.0"
 <<<<<<< HEAD
+<<<<<<< HEAD
 dependencies = [
     "click",
     "prompt-toolkit",
@@ -13,6 +14,9 @@ dependencies = [
 =======
 dependencies = ["click", "prompt-toolkit", "grimp"]
 >>>>>>> 888fd75 (When, throughout all iterations, what is it about?)
+=======
+dependencies = ["click", "prompt-toolkit", "grimp"]
+>>>>>>> a9cc1e3 (chore: save local changes before external integration)
 
 [project.scripts]
 nexus = "cli:main"
