@@ -18,6 +18,7 @@ venv/
 lod/audit_data_complete.json
 *.json
 *.json
+!settings.example.json
 *.log
 *.csv
 *.xlsx
