@@ -14,6 +14,26 @@ from core.primitives.events import EventBus, EventType
 from core.infra.file_discovery import discover
 from core.infra.language_detection import detect
 
+def _derive_root_packages(files: list) -> list[str]:
+    roots = set()
+    for f in files:
+        if f.language == "python":
+            parts = f.relative_path.replace("\\", "/").split("/")
+            root = parts[0]
+            if root.endswith(".py"):
+                root = root[:-3]
+            if root:
+                roots.add(root)
+    return list(roots)
+
+def _imports_from_grimp(graph, module_path: str) -> dict[str, int]:
+    imports = {}
+    for target in graph.find_modules_directly_imported_by(module_path):
+        details = graph.get_import_details(importer=module_path, imported=target)
+        if details:
+            imports[target] = details[0]["line_number"]
+    return imports
+
 logger = logging.getLogger(__name__)
 
 def _parse_python_imports(source: str, module_path: str) -> dict[str, int]:
@@ -136,6 +156,27 @@ async def build_dna(
     modules: Dict[str, ModuleEntry] = {}
         
     await bus.publish_progress("dna_builder", 50, "Parsing files...")
+
+    root_packages = _derive_root_packages(files)
+    grimp_graph = None
+    if root_packages:
+        import sys
+        inserted = False
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+            inserted = True
+        try:
+            import grimp
+            grimp_graph = grimp.build_graph(
+                *root_packages,
+                exclude_type_checking_imports=True,
+            )
+        except Exception as e:
+            logger.warning("grimp: graph build failed or partial: %s", e)
+            grimp_graph = None
+        finally:
+            if inserted and str(project_root) in sys.path:
+                sys.path.remove(str(project_root))
     
     for f in files:
         lang = f.language           # already detected by discover()
@@ -148,6 +189,9 @@ async def build_dna(
             module_path = str(rel_path.parent).replace(os.sep, ".").strip(".")
         else:
             module_path = str(rel_path.with_suffix("")).replace(os.sep, ".").strip(".")
+
+        if ".migrations." in f".{module_path}.":
+            continue
 
         # App assignment
         app = "unknown"
@@ -170,9 +214,14 @@ async def build_dna(
             logger.warning("Cannot read %s: %s", file_path, e)
             continue
 
+        parse_status = "ok"
+
         # Parse imports
         if lang == "python":
-            imports = _parse_python_imports(source, module_path)
+            if grimp_graph is not None and module_path in grimp_graph.modules:
+                imports = _imports_from_grimp(grimp_graph, module_path)
+            else:
+                imports = _parse_python_imports(source, module_path)
         elif lang in ("javascript", "typescript"):
             imports = _parse_js_imports(source, file_path)
         else:
@@ -196,7 +245,8 @@ async def build_dna(
                     for node in ast_module.walk(tree)
                 )
             except SyntaxError:
-                pass
+                parse_status = "error"
+                logger.warning("AST syntax error in %s", module_path)
         elif lang in ("javascript", "typescript"):
             # JS/TS: check for export * from '...'
             has_wildcard = bool(re_module.search(r'\bexport\s+\*\s+from\b', source))
@@ -215,7 +265,7 @@ async def build_dna(
             is_test="test" in rel_path.parts or file_path.name.startswith("test_"),
             lines_of_code=loc,
             language=lang,
-            parse_status="ok",
+            parse_status=parse_status,
             has_wildcard_imports=has_wildcard,
         )
         

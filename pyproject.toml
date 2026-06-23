@@ -1,6 +1,7 @@
 [project]
 name = "nexus-audit"
 version = "0.1.0"
+<<<<<<< HEAD
 dependencies = [
     "click",
     "prompt-toolkit",
@@ -9,6 +10,9 @@ dependencies = [
     "pydantic>=2.5",
     "aiosqlite>=0.20"
 ]
+=======
+dependencies = ["click", "prompt-toolkit", "grimp"]
+>>>>>>> 888fd75 (When, throughout all iterations, what is it about?)
 
 [project.scripts]
 nexus = "cli:main"

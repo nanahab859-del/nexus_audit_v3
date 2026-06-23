@@ -127,3 +127,109 @@ async def test_evaluate_delegations():
     
     findings = await engine.evaluate(dna, [], DummyBus())
     assert findings == []
+
+def create_mock_dna(modules_dict: dict[str, list[str]]) -> ProjectDNA:
+    from core.primitives.models import ModuleEntry, ProjectDNA
+    from datetime import datetime
+    from pathlib import Path
+    
+    modules = {}
+    for name, imports in modules_dict.items():
+        app = name.split(".")[0]
+        modules[name] = ModuleEntry(
+            module_path=name,
+            file_path=Path(f"{name.replace('.', '/')}.py"),
+            relative_path=f"{name.replace('.', '/')}.py",
+            app=app,
+            imports={imp: 1 for imp in imports},
+            defined_names=[],
+            is_test=False,
+            lines_of_code=10,
+            language="python",
+            parse_status="ok",
+            has_wildcard_imports=False,
+        )
+    return ProjectDNA(
+        modules=modules,
+        apps=list({m.app for m in modules.values()}),
+        physical_files=[m.relative_path for m in modules.values()],
+        built_at=datetime.now(),
+        project_root=Path("/")
+    )
+
+@pytest.mark.asyncio
+async def test_cycle_detected():
+    engine = RulesEngine(Path("nonexistent"))
+    rule = RuleDefinition(id="import-cycle", name="Cycle", type="cycle", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    dna = create_mock_dna({
+        "app.a": ["app.b"],
+        "app.b": ["app.c"],
+        "app.c": ["app.a"],
+        "app.d": []
+    })
+    findings = engine._evaluate_cycle(rule, dna)
+    assert len(findings) == 1
+    assert "app.a → app.b → app.c → app.a" in findings[0].description or "app.b → app.c → app.a → app.b" in findings[0].description or "app.c → app.a → app.b → app.c" in findings[0].description
+
+@pytest.mark.asyncio
+async def test_no_false_positive_on_clean_graph():
+    engine = RulesEngine(Path("nonexistent"))
+    rule = RuleDefinition(id="import-cycle", name="Cycle", type="cycle", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    dna = create_mock_dna({
+        "app.a": ["app.b"],
+        "app.b": ["app.c"],
+        "app.c": []
+    })
+    findings = engine._evaluate_cycle(rule, dna)
+    assert len(findings) == 0
+
+@pytest.mark.asyncio
+async def test_deep_chain_no_recursion_error():
+    engine = RulesEngine(Path("nonexistent"))
+    rule = RuleDefinition(id="import-cycle", name="Cycle", type="cycle", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    
+    modules = {f"app.m{i}": [f"app.m{i+1}"] for i in range(2000)}
+    modules["app.m2000"] = []
+    
+    dna = create_mock_dna(modules)
+    findings = engine._evaluate_cycle(rule, dna)
+    assert len(findings) == 0
+
+@pytest.mark.asyncio
+async def test_long_cycle_no_recursion_error():
+    engine = RulesEngine(Path("nonexistent"))
+    rule = RuleDefinition(id="import-cycle", name="Cycle", type="cycle", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    
+    modules = {f"app.m{i}": [f"app.m{i+1}"] for i in range(2000)}
+    modules["app.m2000"] = ["app.m0"]
+    
+    dna = create_mock_dna(modules)
+    findings = engine._evaluate_cycle(rule, dna)
+    assert len(findings) == 1
+
+@pytest.mark.asyncio
+async def test_django_models_cycle_is_informational():
+    engine = RulesEngine(Path("nonexistent"))
+    rule = RuleDefinition(id="import-cycle", name="Cycle", type="cycle", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    dna = create_mock_dna({
+        "my_app.models.a": ["my_app.models.b"],
+        "my_app.models.b": ["my_app.models.a"]
+    })
+    findings = engine._evaluate_cycle(rule, dna)
+    assert len(findings) == 1
+    assert findings[0].severity == Severity.INFO
+    assert "informational" in findings[0].description
+
+@pytest.mark.asyncio
+async def test_cycle_rule_not_in_yaml_means_no_findings():
+    engine = RulesEngine(Path("nonexistent"))
+    engine._rules = [
+        RuleDefinition(id="ghost", name="Ghost", type="ghost", severity="HIGH", category="ARCHITECTURE", languages=["python"], description="", suggestion="")
+    ]
+    dna = create_mock_dna({
+        "app.a": ["app.b"],
+        "app.b": ["app.a"]
+    })
+    class DummyBus: pass
+    findings = await engine.evaluate(dna, [], DummyBus())
+    assert len(findings) == 0 # no ghost findings because file is imported, and no cycle finding because no cycle rule

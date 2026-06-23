@@ -35,20 +35,41 @@ async def test_init_py_normalized(tmp_path):
 
 @pytest.mark.asyncio
 async def test_relative_import_resolved(tmp_path):
-    # This requires full parser logic. I will skip the real parsing part
-    # and just focus on the infrastructure logic for now.
-    pass
+    project_root = tmp_path / "project"
+    app_dir = project_root / "my_app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "__init__.py").write_text("")
+    (app_dir / "mod.py").write_text("from . import sibling")
+    (app_dir / "sibling.py").write_text("pass")
+    
+    bus = EventBus()
+    dna = await build_dna(project_root, bus)
+    
+    assert "my_app.mod" in dna.modules
+    assert "my_app.sibling" in dna.modules["my_app.mod"].imports
 
 @pytest.mark.asyncio
 async def test_alias_discarded(tmp_path):
-    pass
+    project_root = tmp_path / "project"
+    app_dir = project_root / "my_app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "__init__.py").write_text("")
+    (app_dir / "mod.py").write_text("import my_app.sibling as s")
+    (app_dir / "sibling.py").write_text("pass")
+    
+    bus = EventBus()
+    dna = await build_dna(project_root, bus)
+    
+    assert "my_app.mod" in dna.modules
+    assert "my_app.sibling" in dna.modules["my_app.mod"].imports
+    assert "s" not in dna.modules["my_app.mod"].imports
 
 @pytest.mark.asyncio
 async def test_wildcard_detected(tmp_path):
     pass
 
 @pytest.mark.asyncio
-async def test_parse_failure_preserved(tmp_path):
+async def test_syntax_error_degrades_gracefully(tmp_path):
     project_root = tmp_path / "project"
     project_root.mkdir()
     (project_root / "bad.py").write_text("def def def") # Syntax error
@@ -57,7 +78,7 @@ async def test_parse_failure_preserved(tmp_path):
     dna = await build_dna(project_root, bus)
     
     assert "bad" in dna.modules
-    assert dna.modules["bad"].parse_status == "ok"
+    assert dna.modules["bad"].parse_status == "error"
 
 @pytest.mark.asyncio
 async def test_large_file_skipped(tmp_path):
@@ -131,5 +152,47 @@ async def test_app_assignment_parts(tmp_path, monkeypatch):
     
     bus = EventBus()
     dna = await build_dna(project_root, bus)
-    
     assert dna.modules["src.my_backend.app"].app == "my_backend"
+
+@pytest.mark.asyncio
+async def test_type_checking_import_excluded(tmp_path):
+    project_root = tmp_path / "project"
+    app_dir = project_root / "my_app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "__init__.py").write_text("")
+    (app_dir / "mod.py").write_text("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import my_app.other")
+    (app_dir / "other.py").write_text("pass")
+    
+    bus = EventBus()
+    dna = await build_dna(project_root, bus)
+    
+    assert "my_app.mod" in dna.modules
+    assert "my_app.other" not in dna.modules["my_app.mod"].imports
+
+@pytest.mark.asyncio
+async def test_regular_import_included(tmp_path):
+    project_root = tmp_path / "project"
+    app_dir = project_root / "my_app"
+    app_dir.mkdir(parents=True)
+    (app_dir / "__init__.py").write_text("")
+    (app_dir / "mod.py").write_text("import my_app.other")
+    (app_dir / "other.py").write_text("pass")
+    
+    bus = EventBus()
+    dna = await build_dna(project_root, bus)
+    
+    assert "my_app.mod" in dna.modules
+    assert "my_app.other" in dna.modules["my_app.mod"].imports
+
+@pytest.mark.asyncio
+async def test_migrations_excluded(tmp_path):
+    project_root = tmp_path / "project"
+    app_dir = project_root / "some_app" / "migrations"
+    app_dir.mkdir(parents=True)
+    (app_dir / "__init__.py").write_text("")
+    (app_dir / "0001_initial.py").write_text("pass")
+    
+    bus = EventBus()
+    dna = await build_dna(project_root, bus)
+    
+    assert "some_app.migrations.0001_initial" not in dna.modules

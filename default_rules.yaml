@@ -18,3 +18,12 @@ rules:
     languages: ["*"]
     description: "File is never imported by any other module"
     suggestion: "Remove the file or integrate it into the codebase"
+
+  - id: import-cycle
+    name: "Circular Import"
+    type: cycle
+    severity: HIGH
+    category: architecture
+    languages: ["python"]
+    description: "Two or more modules import each other in a cycle, creating tight coupling and potential import errors"
+    suggestion: "Extract the shared dependency into a new module that neither participant imports from"
