@@ -1,5 +1,39 @@
 # Nexus Audit V3 — MCP Server Technical Specification
 
+> **⚠ STATUS — READ BEFORE USING THIS DOCUMENT**
+>
+> This was the original specification: a strictly read-only MCP server.
+> It is **partially superseded** by `MCP_SPECIFICATION_V2.md` (repository
+> root), which is now authoritative. What changed and why:
+>
+> - **Section 7.2's "100% read-only server" claim is no longer accurate.**
+>   Five configuration-write tools were added after this document was
+>   written (`enable_scanners`, `disable_scanners`, `set_scanner_config`,
+>   `set_project_config`, `generate_audit_report`). The Confused Deputy
+>   reasoning in this section is still correct and still the reason those
+>   five tools are now direction-gated (see V2, Section 3) rather than
+>   simply forbidden.
+> - **Section 5's "Nine tools are exposed" is no longer the current count.**
+>   There are 15 tools now: these original 9, plus `list_projects`, plus
+>   the 5 configuration tools above. See V2, Section 2 for the current
+>   registry.
+> - **Section 3.1's process topology showing per-project `nexus_state.db`
+>   is not what was actually built.** The implementation uses a single
+>   global `~/.nexus_audit/index.db` instead. This was not a deliberate,
+>   reasoned change — see `nexus_audit_v3_storage_research.md`'s own
+>   Decision Log, which explicitly argued for per-project. That
+>   discrepancy is tracked separately and is not resolved by V2.
+> - **Everything else below — the STDIO transport design, the failure
+>   mode catalogue (Section 8), the security invariants for path
+>   sandboxing and command injection (Sections 7.3–7.5), the
+>   implementation phasing — is unchanged and still the current design.**
+>   Only the read-only absolutism and the tool count are out of date.
+>
+> Kept here in full, unedited below this notice, as the historical record
+> of the original design and its reasoning.
+
+---
+
 **Document type:** Technical Specification  
 **Protocol revision pinned to:** `2025-06-18` (MCP specification, latest stable)  
 **Status:** Ready for Implementation  
