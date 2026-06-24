@@ -47,7 +47,7 @@ async def get_data(request: web.Request) -> web.Response:
     if not jobs_dir.exists():
         return web.json_response(_EMPTY_DATA_RESPONSE)
 
-    candidates = sorted(jobs_dir.iterdir(), reverse=True)
+    candidates = sorted(jobs_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
     job_dir = next(
         (d for d in candidates if (d / "audit_data_complete.json").exists()),
         None,

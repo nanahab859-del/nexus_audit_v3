@@ -96,7 +96,7 @@ class ReportEngine:
             if not job_dir.exists():
                 raise FileNotFoundError(f"Job '{job_id}' not found.")
         else:
-            candidates = sorted(jobs_dir.iterdir(), reverse=True)
+            candidates = sorted(jobs_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
             job_dir = next(
                 (d for d in candidates
                  if d.is_dir() and (d / "audit_data_complete.json").exists()),
