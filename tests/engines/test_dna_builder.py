@@ -34,20 +34,6 @@ async def test_init_py_normalized(tmp_path):
     assert "pkg.__init__" not in dna.modules
 
 @pytest.mark.asyncio
-async def test_relative_import_resolved(tmp_path):
-    # This requires full parser logic. I will skip the real parsing part
-    # and just focus on the infrastructure logic for now.
-    pass
-
-@pytest.mark.asyncio
-async def test_alias_discarded(tmp_path):
-    pass
-
-@pytest.mark.asyncio
-async def test_wildcard_detected(tmp_path):
-    pass
-
-@pytest.mark.asyncio
 async def test_parse_failure_preserved(tmp_path):
     project_root = tmp_path / "project"
     project_root.mkdir()
