@@ -1,5 +1,5 @@
 # Nexus Audit V3 — Project State Document
-**Last updated:** Session 2026-06-24 (sort fix merged — NexusTestBed validation is next)
+**Last updated:** Session 2026-06-24 (sort fix merged; standing instructions doc created; workspace audit complete)
 **Maintained by:** Lead Code Auditor (Claude)
 **Project path:** `\\wsl.localhost\Ubuntu-22.04\home\yusupha\my_tools\nexus_audit_v3\`
 
@@ -161,6 +161,7 @@ All three mtime sort callsites fixed and merged (commits `cd6d5a9`, `c53dc02`).
 | File | What it covers |
 |------|----------------|
 | `PROJECT_STATE.md` | This file — always read first in new sessions |
+| `AUDITOR_STANDING_INSTRUCTIONS.md` | **Read second every session** — standing rules, workspace map, branch ownership register |
 | `LAYER1_CLI_COMMAND_REFACTOR.md` | commands/ package restructure |
 | `LAYER1_PRIMITIVES_REFACTOR.md` | settings.py, security.py, models.py |
 | `LAYER1_EVENTS_ATOMIC_REFACTOR.md` | events.py async + atomic.py |
