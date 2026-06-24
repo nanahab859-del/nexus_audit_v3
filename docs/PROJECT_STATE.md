@@ -1,5 +1,5 @@
 # Nexus Audit V3 — Project State Document
-**Last updated:** Session 2026-06-24
+**Last updated:** Session 2026-06-24 (sort fix merged — NexusTestBed validation is next)
 **Maintained by:** Lead Code Auditor (Claude)
 **Project path:** `\\wsl.localhost\Ubuntu-22.04\home\yusupha\my_tools\nexus_audit_v3\`
 
@@ -122,14 +122,14 @@ nexus_audit_v3/
 
 ## Git Branch State
 
-### `main` (HEAD: `bcdf324`)
-All planned work is on main. Last commit restored `docs/`.
+### `main` (HEAD: `c53dc02`)
+All three mtime sort callsites fixed and merged (commits `cd6d5a9`, `c53dc02`).
 
 ### Feature Branches
 
 | Branch | Tip Commit | What it does | Merge status |
 |--------|-----------|-------------|-------------|
-| `feature/audit-trend-diff-fixqueue` | `778801f` | Fixes `audit:history` sort by mtime; clears stdout buffer after --follow | **BLOCKED — needs 2 more fixes before merge (see JOB_HISTORY_SORT_FIX.md)** |
+| `feature/audit-trend-diff-fixqueue` | `778801f` | Fixes `audit:history` sort by mtime; clears stdout buffer after --follow | MERGED to main (c53dc02) |
 | `feature/trend-diff-fixqueue-mcp` | `b6b4d78` | Same as main tip — placeholder for MCP trend/diff work | Inspect before merge |
 | `feature/f01-cycle-detection-grimp` | `3d40179` | Cycle detection via `grimp` library | Inspect before merge |
 | `feature/integrate-mcp-sqlite` | `3d40179` | SQLite indexing for MCP server (shares tip with f01) | Inspect before merge |
@@ -138,7 +138,7 @@ All planned work is on main. Last commit restored `docs/`.
 
 ### Merge Order
 
-1. `feature/audit-trend-diff-fixqueue` — **after** agent fixes the two remaining sort callsites
+1. `feature/audit-trend-diff-fixqueue` — MERGED to main
 2. Inspect `trend-diff-fixqueue-mcp`, `mcp-server-sqlite-index`, `integrate-mcp-sqlite`
 3. Resolve overlap between `f01-cycle-detection-grimp` and `integrate-mcp-sqlite`
 4. `legacy-feature-integration` last — needs full inspection
@@ -149,8 +149,8 @@ All planned work is on main. Last commit restored `docs/`.
 
 | Priority | Issue | Status |
 |----------|-------|--------|
-| **IMMEDIATE** | `audit:history` sort bug fixed in branch, but `report_engine.py:99` and `api/routes_data.py:50` still use alphabetical UUID sort | Agent must fix 2 lines, then merge branch — see `JOB_HISTORY_SORT_FIX.md` |
-| High | Full NexusTestBed validation — run audit, compare 24 planted issues against findings | Blocked until sort fix merged |
+| **IMMEDIATE** | NexusTestBed full validation — run fresh audit on project 530f72b2, verify 20+/24 planted issues detected | Sort fix merged — unblocked, ready to run |
+| High | Inspect and triage remaining 5 feature branches | — |
 | Medium | Frontend layer not yet audited | — |
 | Low | AI module stubs — planned, not yet implemented | — |
 
@@ -174,7 +174,7 @@ All planned work is on main. Last commit restored `docs/`.
 | `ORCHESTRATOR_AND_HISTORY_FIXES.md` | Phase reporting, default scanners |
 | `STATIC_AUDIT_FIXES.md` | Static audit — 10 fixes, 14 files |
 | `POST_AUDIT_MINOR_FIXES.md` | Comments fix + double cleanup fix |
-| `JOB_HISTORY_SORT_FIX.md` | mtime sort fix — 3 callsites total; 1 fixed in branch, 2 remain |
+| `JOB_HISTORY_SORT_FIX.md` | mtime sort fix — all 3 callsites fixed and merged to main |
 
 ---
 
