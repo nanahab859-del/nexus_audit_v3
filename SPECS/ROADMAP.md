@@ -40,7 +40,7 @@ These two must come first. Until they are done, v3's output cannot be trusted on
 - Spec: write `specs/features/01_circular_dependency_detection.md`
 - Implement
 
-**Status:** Not started
+**Status:** ✅ Done — implemented, tested (28/28), merged.
 
 ---
 
@@ -227,4 +227,4 @@ These three features have working backend logic already in v3. The gap is the AP
 
 ## Current Position
 
-Starting with **Feature 1: Circular Dependency Detection** — research phase.
+Starting with **Feature 2: App Boundary Enforcement** — research phase.
