@@ -39,13 +39,14 @@ CREATE INDEX IF NOT EXISTS idx_findings_fingerprint ON findings(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_runs_project ON runs(project_id, timestamp);
 """
 
-def _get_db_path() -> Path:
-    return Path.home() / ".nexus_audit" / "index.db"
+def _get_db_path(project_id: str) -> Path:
+    path = Path.home() / ".nexus_audit" / "projects" / project_id / "nexus_state.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
-async def open_index() -> sqlite3.Connection:
+async def open_index(project_id: str) -> sqlite3.Connection:
     def _open():
-        db_path = _get_db_path()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path = _get_db_path(project_id)
         conn = sqlite3.connect(str(db_path), isolation_level=None, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.executescript(_PRAGMAS)
@@ -55,8 +56,7 @@ async def open_index() -> sqlite3.Connection:
 
 async def upsert_run(project_id: str, summary: dict, job_dir: Path) -> None:
     def _upsert():
-        db_path = _get_db_path()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path = _get_db_path(project_id)
         conn = sqlite3.connect(str(db_path), isolation_level=None, check_same_thread=False)
         conn.executescript(_PRAGMAS)
         conn.executescript(_SCHEMA_SQL)
@@ -174,9 +174,9 @@ async def upsert_run(project_id: str, summary: dict, job_dir: Path) -> None:
     await asyncio.to_thread(_upsert)
 
 async def rebuild_index(project_id: str = None) -> Dict[str, Any]:
-    # Rebuild the global index
+    # Rebuild the per-project index
     def _rebuild():
-        db_path = _get_db_path()
+        db_path = _get_db_path(project_id)
         if db_path.exists():
             db_path.unlink()
         
@@ -306,7 +306,7 @@ async def rebuild_index(project_id: str = None) -> Dict[str, Any]:
 
 async def get_trend(project_id: str, limit: int = 30) -> list:
     def _query():
-        db_path = _get_db_path()
+        db_path = _get_db_path(project_id)
         if not db_path.exists():
             return []
             
@@ -328,7 +328,7 @@ async def get_trend(project_id: str, limit: int = 30) -> list:
 
 async def get_fix_queue(project_id: str) -> list:
     def _query():
-        db_path = _get_db_path()
+        db_path = _get_db_path(project_id)
         if not db_path.exists():
             return []
             
@@ -363,7 +363,7 @@ async def get_fix_queue(project_id: str) -> list:
 
 async def diff_runs(project_id: str, base_run_id: str, head_run_id: str) -> dict:
     def _query():
-        db_path = _get_db_path()
+        db_path = _get_db_path(project_id)
         if not db_path.exists():
             return {}
             
