@@ -138,39 +138,113 @@ def register(mcp: FastMCP):
     @mcp.tool()
     async def get_fix_queue(input: FixQueueInput) -> dict:
         """Returns the ranked fix queue — findings ordered by severity × age × recurrence."""
-        from core.primitives.settings import SettingsManager
-        from orchestrator import Orchestrator
+        from core.infra.audit_index import get_fix_queue as idx_get_fix_queue
+        import datetime
+        from datetime import timezone
         try:
             project_id = await resolve_project_id(input.project_path)
-            sm = SettingsManager()
-            orch = Orchestrator(sm)
-            return await orch.get_fix_queue(project_id, severity_floor=input.severity_floor, limit=input.limit)
+            raw_queue = await idx_get_fix_queue(project_id)
+
+            sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+            floor_rank = sev_rank.get(input.severity_floor.upper(), 0)
+            now = datetime.datetime.now(timezone.utc).timestamp()
+
+            queue = []
+            for idx_item, item in enumerate(raw_queue):
+                if sev_rank.get(item.get("severity", "").upper(), 0) < floor_rank:
+                    continue
+                first_ts = item.get("first_seen_ts", now)
+                age_days = int((now - first_ts) / 86400)
+                queue.append({
+                    "rank": idx_item + 1,
+                    "finding_hash": item["fingerprint"],
+                    "rule_id": item["category"],
+                    "severity": item["severity"],
+                    "file_path": item["file_path"],
+                    "age_days": max(0, age_days),
+                    "score_impact": 0.0,
+                })
+
+            return {"total": len(queue), "queue": queue[:input.limit]}
         except Exception as e:
             return {"error": str(e)}
 
     @mcp.tool()
     async def get_trend(input: TrendInput) -> dict:
         """Returns the score trend for the project."""
-        from core.primitives.settings import SettingsManager
-        from orchestrator import Orchestrator
+        from core.infra.audit_index import get_trend as idx_get_trend
+        import datetime
         try:
             project_id = await resolve_project_id(input.project_path)
-            sm = SettingsManager()
-            orch = Orchestrator(sm)
-            return await orch.get_trend(project_id, last_n_runs=input.last_n_runs, branch=input.branch)
+            raw_trend = await idx_get_trend(project_id, limit=input.last_n_runs)
+
+            runs = []
+            for r in reversed(raw_trend):  # oldest first for the trend table
+                dt = datetime.datetime.fromtimestamp(
+                    r["timestamp"], tz=datetime.timezone.utc
+                )
+                runs.append({
+                    "timestamp": dt.isoformat(),
+                    "git_commit": "?",
+                    "scores": {
+                        "overall": r["score_overall"],
+                        "security": r["score_security"],
+                        "quality": r["score_quality"],
+                    },
+                    "counts": {
+                        "critical": r["CRITICAL_count"],
+                        "high": r["HIGH_count"],
+                    },
+                })
+
+            return {"runs": runs}
         except Exception as e:
             return {"error": str(e)}
 
     @mcp.tool()
     async def diff_runs(input: DiffInput) -> dict:
         """Returns the structural diff between two audit runs."""
-        from core.primitives.settings import SettingsManager
-        from orchestrator import Orchestrator
+        from core.infra.audit_index import diff_runs as idx_diff_runs, get_trend as idx_get_trend
         try:
             project_id = await resolve_project_id(input.project_path)
             async with project_lock(project_id):
-                sm = SettingsManager()
-                orch = Orchestrator(sm)
-                return await orch.diff_runs(project_id, run_id_a=input.run_id_a, run_id_b=input.run_id_b)
+                # Fetch recent runs for score delta calculation
+                recent = await idx_get_trend(project_id, limit=10)
+                run_a = next((r for r in recent if r["run_id"] == input.run_id_a), None)
+                run_b = next((r for r in recent if r["run_id"] == input.run_id_b), None)
+
+                score_delta: dict = {}
+                if run_a and run_b:
+                    score_delta = {
+                        "overall": run_b["score_overall"] - run_a["score_overall"],
+                        "security": run_b["score_security"] - run_a["score_security"],
+                        "quality": run_b["score_quality"] - run_a["score_quality"],
+                    }
+
+                diff = await idx_diff_runs(
+                    project_id,
+                    base_run_id=input.run_id_a,
+                    head_run_id=input.run_id_b,
+                )
+                new_findings = diff.get("new", [])
+                sev_counts: dict = {}
+                for nf in new_findings:
+                    sev = nf.get("severity", "UNKNOWN")
+                    sev_counts[sev] = sev_counts.get(sev, 0) + 1
+
+                return {
+                    "run_id_a": input.run_id_a,
+                    "run_id_b": input.run_id_b,
+                    "score_delta": score_delta,
+                    "new_findings": {
+                        "count": len(new_findings),
+                        "by_severity": sev_counts,
+                    },
+                    "resolved_findings": {
+                        "count": len(diff.get("resolved", [])),
+                    },
+                    "coupling_changes": {"added_edges": [], "removed_edges": []},
+                    "probable_commit": None,
+                }
         except Exception as e:
             return {"error": str(e)}
