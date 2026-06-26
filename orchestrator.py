@@ -281,9 +281,12 @@ class Orchestrator:
             output_dir.mkdir(parents=True, exist_ok=True)
             # AI Recommendations (STUB — not yet implemented)
             recommendations: List[Any] = []
+            # Route dependency findings to dedicated output section
+            dependency_findings = [f for f in all_findings if f.category.value == "dependency"]
             result_data = self._build_result(
                 job, all_findings, app_scores, fleet_average,
-                coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna
+                coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna,
+                dependency_findings=dependency_findings
             )
             await write_json(output_dir / "audit_data_complete.json", result_data, indent=2)
             await write_json(
@@ -312,7 +315,7 @@ class Orchestrator:
             if self._audit_logger:
                 await self._audit_logger.stop()
 
-    def _build_result(self, job, all_findings, app_scores, fleet_average, coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna) -> dict:
+    def _build_result(self, job, all_findings, app_scores, fleet_average, coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna, dependency_findings=None) -> dict:
         from core.primitives.models import to_dict
         
         apps_dict = {}
@@ -354,7 +357,7 @@ class Orchestrator:
             "coupling_matrix": coupling,
             "dna": to_dict(dna),
             "config_health": [],
-            "dependency_scan": [],
+            "dependency_scan": [to_dict(f) for f in (dependency_findings or [])],
             "recommendations": recommendations if recommendations else [],
             "change_summary": {
                 "first_run": False,
