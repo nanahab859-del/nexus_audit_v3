@@ -24,6 +24,7 @@ from core.engines.scoring_engine import calculate_scores
 from core.engines.coupling import build_coupling_matrix
 from core.engines.timeline import load_score_history, compute_violation_persistence
 from core.engines.fix_queue import FixQueue
+from core.infra.audit_index import upsert_run
 
 logger = logging.getLogger(__name__)
 
@@ -280,15 +281,19 @@ class Orchestrator:
             output_dir.mkdir(parents=True, exist_ok=True)
             # AI Recommendations (STUB — not yet implemented)
             recommendations: List[Any] = []
+            # Route dependency findings to dedicated output section
+            dependency_findings = [f for f in all_findings if f.category.value == "dependency"]
             result_data = self._build_result(
                 job, all_findings, app_scores, fleet_average,
-                coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna
+                coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna,
+                dependency_findings=dependency_findings
             )
             await write_json(output_dir / "audit_data_complete.json", result_data, indent=2)
             await write_json(
                 output_dir / "audit_summary.json",
                 self._build_summary(result_data), indent=2
             )
+            await upsert_run(project_id, self._build_summary(result_data), output_dir)
 
             # COMPLETE
             job.state       = JobState.COMPLETED
@@ -310,7 +315,7 @@ class Orchestrator:
             if self._audit_logger:
                 await self._audit_logger.stop()
 
-    def _build_result(self, job, all_findings, app_scores, fleet_average, coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna) -> dict:
+    def _build_result(self, job, all_findings, app_scores, fleet_average, coupling, trends, sync_result, git_ctx, recommendations, rules_engine, dna, dependency_findings=None) -> dict:
         from core.primitives.models import to_dict
         
         apps_dict = {}
@@ -352,7 +357,7 @@ class Orchestrator:
             "coupling_matrix": coupling,
             "dna": to_dict(dna),
             "config_health": [],
-            "dependency_scan": [],
+            "dependency_scan": [to_dict(f) for f in (dependency_findings or [])],
             "recommendations": recommendations if recommendations else [],
             "change_summary": {
                 "first_run": False,
@@ -392,4 +397,126 @@ class Orchestrator:
             "app_scores":     {k: v["score"] for k, v in result_data["apps"].items()},
             "findings_count": len(result_data["findings"]),
             "findings":       findings_with_fp,
+        }
+
+    async def diff_runs(self, project_id: str, run_id_a: Optional[str] = None, run_id_b: Optional[str] = None) -> dict:
+        from core.infra.audit_index import get_trend, diff_runs as idx_diff_runs
+        
+        # Get recent runs to find defaults if not provided
+        recent = await get_trend(project_id, limit=10)
+        if len(recent) < 2:
+            raise ValueError("Not enough runs to diff.")
+            
+        if run_id_b is None:
+            run_id_b = recent[0]["run_id"]
+        if run_id_a is None:
+            run_id_a = recent[1]["run_id"]
+            
+        run_a = next((r for r in recent if r["run_id"] == run_id_a), None)
+        run_b = next((r for r in recent if r["run_id"] == run_id_b), None)
+        
+        if not run_a or not run_b:
+            raise ValueError("Specified runs not found.")
+            
+        score_delta = {
+            "overall": run_b["score_overall"] - run_a["score_overall"],
+            "security": run_b["score_security"] - run_a["score_security"],
+            "quality": run_b["score_quality"] - run_a["score_quality"],
+        }
+        
+        diff = await idx_diff_runs(project_id, run_id_a, run_id_b)
+        new_findings = diff.get("new", [])
+        
+        sev_counts = {}
+        for nf in new_findings:
+            sev = nf.get("severity", "UNKNOWN")
+            sev_counts[sev] = sev_counts.get(sev, 0) + 1
+            
+        return {
+            "run_id_a": run_id_a,
+            "run_id_b": run_id_b,
+            "score_delta": score_delta,
+            "new_findings": {
+                "count": len(new_findings),
+                "by_severity": sev_counts
+            },
+            "resolved_findings": {
+                "count": len(diff.get("resolved", []))
+            },
+            "coupling_changes": {"added_edges": [], "removed_edges": []},
+            "probable_commit": None
+        }
+
+    async def get_trend(self, project_id: str, last_n_runs: int = 10, branch: Optional[str] = None) -> dict:
+        from core.infra.audit_index import get_trend as idx_get_trend
+        
+        raw_trend = await idx_get_trend(project_id, limit=last_n_runs)
+        
+        # Format for the CLI spec expected output
+        runs = []
+        for r in reversed(raw_trend): # Return oldest first for the trend table
+            # Timestamp format expected: ISO
+            import datetime
+            dt = datetime.datetime.fromtimestamp(r["timestamp"], tz=datetime.timezone.utc)
+            runs.append({
+                "timestamp": dt.isoformat(),
+                "git_commit": "?",
+                "scores": {
+                    "overall": r["score_overall"],
+                    "security": r["score_security"],
+                    "quality": r["score_quality"]
+                },
+                "counts": {
+                    "critical": r["CRITICAL_count"],
+                    "high": r["HIGH_count"]
+                }
+            })
+            
+        return {"runs": runs}
+
+    async def get_fix_queue(self, project_id: str, severity_floor: str = "HIGH", limit: int = 10) -> dict:
+        from core.infra.audit_index import get_fix_queue as idx_get_fix_queue
+        import datetime
+        
+        raw_queue = await idx_get_fix_queue(project_id)
+        
+        # Filter by severity floor
+        sev_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+        floor_rank = sev_rank.get(severity_floor.upper(), 0)
+        
+        queue = []
+        now = datetime.datetime.now(timezone.utc).timestamp()
+        
+        for idx, item in enumerate(raw_queue):
+            if sev_rank.get(item.get("severity", "").upper(), 0) < floor_rank:
+                continue
+                
+            first_ts = item.get("first_seen_ts", now)
+            age_days = int((now - first_ts) / 86400)
+            
+            queue.append({
+                "rank": idx + 1,
+                "finding_hash": item["fingerprint"],
+                "rule_id": item["category"], # Assuming category maps to rule_id in SQLite
+                "severity": item["severity"],
+                "file_path": item["file_path"],
+                "age_days": max(0, age_days),
+                "score_impact": 0.0 # Stubs until full impact scoring is moved to sqlite
+            })
+            
+        return {
+            "total": len(queue),
+            "queue": queue[:limit]
+        }
+
+    async def export_audit(self, project_id: str, format: str = "sarif", since_days: int = 90, output_path: Optional[str] = None) -> dict:
+        # Stub export to satisfy the command structure
+        if not output_path:
+            import datetime
+            date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            output_path = f"{project_id}_export_{date_str}.{format}"
+            
+        return {
+            "findings_count": 0,
+            "output_path": output_path
         }

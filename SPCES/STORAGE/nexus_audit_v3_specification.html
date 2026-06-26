@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nexus Audit V3 — Technical Specification</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#111827;--ink2:#374151;--ink3:#6B7280;
+  --bg:#ffffff;--bg2:#F9FAFB;--bg3:#F3F4F6;
+  --brd:#E5E7EB;--brd2:#D1D5DB;
+  --blue:#2563EB;--blue-lt:#EFF6FF;--blue-brd:#BFDBFE;
+  --green:#16A34A;--green-lt:#F0FDF4;--green-brd:#BBF7D0;
+  --amber:#D97706;--amber-lt:#FFFBEB;--amber-brd:#FDE68A;
+  --red:#DC2626;--red-lt:#FEF2F2;--red-brd:#FECACA;
+  --purple:#7C3AED;--purple-lt:#F5F3FF;--purple-brd:#DDD6FE;
+  --teal:#0D9488;--teal-lt:#F0FDFA;--teal-brd:#99F6E4;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --mono:'SF Mono','Cascadia Code','Fira Code','Consolas',monospace
+}
+@media(prefers-color-scheme:dark){:root{
+  --ink:#F9FAFB;--ink2:#D1D5DB;--ink3:#9CA3AF;
+  --bg:#0F172A;--bg2:#1E293B;--bg3:#334155;
+  --brd:#334155;--brd2:#475569;
+  --blue:#60A5FA;--blue-lt:#1E3A5F;--blue-brd:#1D4ED8;
+  --green:#4ADE80;--green-lt:#14532D;--green-brd:#166534;
+  --amber:#FCD34D;--amber-lt:#451A03;--amber-brd:#78350F;
+  --red:#F87171;--red-lt:#450A0A;--red-brd:#7F1D1D;
+  --purple:#C4B5FD;--purple-lt:#2E1065;--purple-brd:#4C1D95;
+  --teal:#5EEAD4;--teal-lt:#042F2E;--teal-brd:#134E4A
+}}
+body{font-family:var(--font);font-size:16px;line-height:1.75;color:var(--ink);background:var(--bg)}
+.wrap{max-width:920px;margin:0 auto;padding:52px 28px 100px}
+
+/* ── Cover ── */
+.cover{padding-bottom:48px;margin-bottom:48px;border-bottom:2px solid var(--brd)}
+.cover-eyebrow{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);margin-bottom:14px}
+.cover h1{font-size:42px;font-weight:800;letter-spacing:-.025em;line-height:1.1;margin-bottom:16px}
+.cover h1 em{font-style:normal;color:var(--blue)}
+.cover-lead{font-size:18px;color:var(--ink2);max-width:640px;line-height:1.6;margin-bottom:28px}
+.cover-meta{display:flex;gap:28px;flex-wrap:wrap;font-size:13px;color:var(--ink3);align-items:center}
+.badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:.06em;text-transform:uppercase;border:1.5px solid}
+.badge-ready{background:var(--green-lt);color:var(--green);border-color:var(--green-brd)}
+.badge-review{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-brd)}
+
+/* ── TOC ── */
+.toc{background:var(--bg2);border:1px solid var(--brd);border-radius:12px;padding:24px 28px;margin-bottom:52px}
+.toc-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:14px}
+.toc ol{padding-left:20px;margin:0}
+.toc li{margin-bottom:5px;font-size:14px;color:var(--ink2)}
+.toc a{color:var(--blue);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.toc-sub{font-size:13px;color:var(--ink3);margin-left:6px}
+
+/* ── Typography ── */
+.sec{margin-bottom:60px;scroll-margin-top:32px}
+.sec-num{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);margin-bottom:6px}
+h2{font-size:30px;font-weight:700;letter-spacing:-.015em;line-height:1.2;margin-bottom:18px}
+h3{font-size:20px;font-weight:600;margin-top:36px;margin-bottom:12px;line-height:1.3}
+h4{font-size:16px;font-weight:600;margin-top:24px;margin-bottom:8px}
+p{margin-bottom:16px;color:var(--ink)}
+ul,ol{padding-left:22px;margin-bottom:16px}
+li{margin-bottom:7px;font-size:15px;line-height:1.6}
+hr{border:none;border-top:1px solid var(--brd);margin:44px 0}
+
+/* ── Callouts ── */
+.note{border-radius:10px;padding:16px 20px;margin:24px 0;border-left:4px solid}
+.note-lbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+.note p{margin:0;font-size:14px;line-height:1.6;color:var(--ink2)}
+.note-info{background:var(--blue-lt);border-left-color:var(--blue)}
+.note-info .note-lbl{color:var(--blue)}
+.note-warn{background:var(--amber-lt);border-left-color:var(--amber)}
+.note-warn .note-lbl{color:var(--amber)}
+.note-key{background:var(--purple-lt);border-left-color:var(--purple)}
+.note-key .note-lbl{color:var(--purple)}
+.note-win{background:var(--green-lt);border-left-color:var(--green)}
+.note-win .note-lbl{color:var(--green)}
+.note-err{background:var(--red-lt);border-left-color:var(--red)}
+.note-err .note-lbl{color:var(--red)}
+
+/* ── Code ── */
+pre,code{font-family:var(--mono);font-size:13px}
+code{background:var(--bg3);padding:2px 6px;border-radius:4px;border:1px solid var(--brd)}
+pre{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:20px 24px;overflow-x:auto;margin:20px 0;line-height:1.65}
+pre code{background:none;border:none;padding:0}
+.kw{color:var(--blue)}
+.cm{color:var(--ink3)}
+.st{color:var(--green)}
+.nm{color:var(--amber)}
+
+/* ── Tables ── */
+.tbl-wrap{overflow-x:auto;margin:24px 0;border-radius:10px;border:1px solid var(--brd)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{background:var(--bg2);font-weight:600;text-align:left;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);border-bottom:1px solid var(--brd)}
+td{padding:11px 14px;border-bottom:1px solid var(--brd);vertical-align:top;line-height:1.55}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:var(--bg2)}
+.td-good{color:var(--green);font-weight:500}
+.td-warn{color:var(--amber);font-weight:500}
+.td-bad{color:var(--red);font-weight:500}
+.td-neu{color:var(--ink3)}
+
+/* ── Diagrams ── */
+.diagram{border:1px solid var(--brd);border-radius:12px;overflow:hidden;margin:28px 0;background:var(--bg2)}
+.diagram svg{display:block;width:100%;height:auto}
+.diagram-cap{font-size:12px;color:var(--ink3);text-align:center;padding:8px 16px 12px;font-style:italic}
+
+/* ── Comparison cards ── */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0}
+.cmp-card{border:1px solid var(--brd);border-radius:10px;padding:20px;background:var(--bg)}
+.cmp-card.winner{border-color:var(--blue);background:var(--blue-lt)}
+.cmp-card h4{margin-top:0;margin-bottom:8px;font-size:15px}
+.cmp-card p{font-size:13px;color:var(--ink2);margin:0;line-height:1.55}
+.cmp-label{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px}
+.cmp-label-bad{color:var(--red)}
+.cmp-label-good{color:var(--green)}
+
+/* ── Feature list ── */
+.feat-list{display:flex;flex-direction:column;gap:12px;margin:20px 0}
+.feat{display:flex;gap:14px;padding:16px 18px;border:1px solid var(--brd);border-radius:10px;background:var(--bg);align-items:flex-start}
+.feat-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.feat-body h4{margin:0 0 4px;font-size:15px}
+.feat-body p{margin:0;font-size:13px;color:var(--ink2);line-height:1.55}
+.feat.killer{border-color:var(--blue);background:var(--blue-lt)}
+.feat.killer .feat-icon{background:var(--blue);color:white}
+.feat.standard .feat-icon{background:var(--bg3)}
+
+/* ── Steps ── */
+.steps{margin:20px 0;counter-reset:step}
+.step{display:flex;gap:16px;margin-bottom:28px;padding-bottom:28px;border-bottom:1px solid var(--brd)}
+.step:last-child{border-bottom:none;margin-bottom:0}
+.step-n{counter-increment:step;width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px}
+.step-n::before{content:counter(step)}
+.step-body h4{margin:0 0 6px;font-size:15px}
+.step-body p{margin:0 0 10px;font-size:14px;color:var(--ink2)}
+.step-body p:last-child{margin-bottom:0}
+.checkpoint{font-size:12px;color:var(--green);font-weight:600;margin-top:8px}
+.checkpoint::before{content:"✓ Checkpoint: "}
+
+/* ── Scale table ── */
+.scale-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:20px 0}
+.scale-cell{border:1px solid var(--brd);border-radius:8px;padding:14px;background:var(--bg);text-align:center}
+.scale-cell .val{font-size:22px;font-weight:700;margin-bottom:4px}
+.scale-cell .lbl{font-size:11px;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
+.scale-cell.ok .val{color:var(--green)}
+.scale-cell.warn .val{color:var(--amber)}
+.scale-cell.bad .val{color:var(--red)}
+
+/* ── Roadmap ── */
+.road{border-left:2px solid var(--brd);margin:24px 0 0 12px;padding-left:24px}
+.road-item{margin-bottom:32px;position:relative}
+.road-item::before{content:'';width:12px;height:12px;border-radius:50%;background:var(--brd2);position:absolute;left:-31px;top:5px;border:2px solid var(--bg)}
+.road-item.done::before{background:var(--green)}
+.road-item.now::before{background:var(--blue)}
+.road-item.next::before{background:var(--amber)}
+.road-tag{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+.road-tag-done{color:var(--green)}
+.road-tag-now{color:var(--blue)}
+.road-tag-next{color:var(--amber)}
+.road-item h4{margin:0 0 6px;font-size:16px}
+.road-item p{margin:0;font-size:14px;color:var(--ink2)}
+
+/* ── Print ── */
+@media print{
+  .wrap{padding:20px;max-width:100%}
+  .diagram{break-inside:avoid}
+  pre{white-space:pre-wrap;break-inside:avoid}
+  h2,h3{break-after:avoid}
+}
+@media(max-width:600px){
+  .cmp{grid-template-columns:1fr}
+  .scale-row{grid-template-columns:1fr 1fr}
+  .cover h1{font-size:28px}
+  h2{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ═══════════════════════════ COVER ═══════════════════════════ -->
+<header class="cover">
+  <div class="cover-eyebrow">Technical Specification</div>
+  <h1>Nexus Audit <em>V3</em></h1>
+  <p class="cover-lead">A local-first, zero-setup code analysis platform that replaces the fragmented ecosystem of Python linters with a single unified engine featuring real-time scanning, historical trend analysis, and a queryable audit archive.</p>
+  <div class="cover-meta">
+    <span class="badge badge-ready">Ready for Implementation</span>
+    <span><strong>Version:</strong> 3.0.0-spec</span>
+    <span><strong>Date:</strong> June 2026</span>
+    <span><strong>Authors:</strong> Nexus Audit Team</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ TOC ═══════════════════════════ -->
+<nav class="toc">
+  <div class="toc-label">Table of Contents</div>
+  <ol>
+    <li><a href="#s1">The Problem — Life Without Nexus Audit V3</a></li>
+    <li><a href="#s2">The Solution — What Nexus Audit V3 Delivers</a></li>
+    <li><a href="#s3">Competitive Landscape</a> <span class="toc-sub">SonarQube · Semgrep · Snyk · Trivy</span></li>
+    <li><a href="#s4">Storage Architecture Specification</a> <span class="toc-sub">JSON + SQLite hybrid · schemas · WAL pragmas</span></li>
+    <li><a href="#s5">CLI Specification</a> <span class="toc-sub">All commands · flags · output formats</span></li>
+    <li><a href="#s6">Killer Features</a> <span class="toc-sub">nexus diff · rebuild-index · SARIF export</span></li>
+    <li><a href="#s7">Implementation Guide</a> <span class="toc-sub">Step-by-step · fear-reduced walkthrough</span></li>
+    <li><a href="#s8">Performance Specification</a> <span class="toc-sub">Scale thresholds · benchmarks · targets</span></li>
+    <li><a href="#s9">Appendix — Decisions &amp; Rationale</a></li>
+  </ol>
+</nav>
+
+<!-- ═══════════════════════════ SECTION 1 ═══════════════════════════ -->
+<section class="sec" id="s1">
+  <div class="sec-num">Section 01</div>
+  <h2>The Problem — Life Without Nexus Audit V3</h2>
+
+  <p>Consider two analogies that perfectly describe the current state of developer tooling.</p>
+
+  <h3>The School With No Unified Report Card</h3>
+  <p>Imagine a school where each teacher keeps their own grade book in a completely different format. Mrs. Smith uses handwritten ledgers, Mr. Jones uses a private spreadsheet, and Ms. Williams uses a proprietary app with no export. At the end of term, the headteacher must phone each teacher individually to compile a final report. There is no early warning when a student is failing across multiple subjects simultaneously. There is no way to see whether performance has improved or declined over the past three terms. Every decision is made in the dark.</p>
+  <p>This is precisely the situation every Python developer faces with code quality tooling today.</p>
+
+  <h3>The Airport With Five Separate Security Desks</h3>
+  <p>Now imagine an airport where security is split across five independent desks, each checking a different thing, each with its own queue, its own output format, and its own record-keeping system. To board your flight you must visit all five desks, collect five different slips of paper, and then manually reconcile them yourself. If one desk was flagging more passengers than usual last week, there is no way to know — each desk's records are isolated.</p>
+  <p>Below is the technical equivalent of that airport: the current Python developer toolchain.</p>
+
+  <!-- SVG 1: The Fragmented Toolchain -->
+  <div class="diagram">
+    <svg viewBox="0 0 780 360" xmlns="http://www.w3.org/2000/svg" role="img">
+      <title>The fragmented developer toolchain — before Nexus Audit V3</title>
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M1 1L9 5L1 9" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M1 1L9 5L1 9" fill="none" stroke="#DC2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Background -->
+      <rect x="1" y="1" width="778" height="358" rx="11" fill="#FFF5F5" stroke="#FECACA" stroke-width="1.5"/>
+      <text x="389" y="24" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#DC2626" letter-spacing="1">YOUR PROJECT — NO UNIFIED VIEW, NO HISTORY, NO TRENDS</text>
+
+      <!-- Codebase box -->
+      <rect x="289" y="36" width="202" height="44" rx="8" fill="#F3F4F6" stroke="#9CA3AF" stroke-width="1.5"/>
+      <text x="390" y="54" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#374151">Your Codebase</text>
+      <text x="390" y="70" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">10,000+ lines of Python</text>
+
+      <!-- Distribution bar -->
+      <line x1="390" y1="80" x2="390" y2="102" stroke="#9CA3AF" stroke-width="1.5"/>
+      <line x1="100" y1="102" x2="680" y2="102" stroke="#9CA3AF" stroke-width="1.5"/>
+      <line x1="100" y1="102" x2="100" y2="122" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="285" y1="102" x2="285" y2="122" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="495" y1="102" x2="495" y2="122" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="680" y1="102" x2="680" y2="122" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+
+      <!-- Tool: Bandit -->
+      <rect x="30" y="122" width="140" height="72" rx="8" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+      <text x="100" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#92400E">Bandit</text>
+      <text x="100" y="160" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#92400E">Security linter</text>
+      <text x="100" y="176" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#B45309">$ bandit -r src/</text>
+
+      <!-- Tool: Pylint -->
+      <rect x="215" y="122" width="140" height="72" rx="8" fill="#F0FDF4" stroke="#22C55E" stroke-width="1.5"/>
+      <text x="285" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#166534">Pylint</text>
+      <text x="285" y="160" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#166534">Style + quality</text>
+      <text x="285" y="176" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#15803D">$ pylint src/</text>
+
+      <!-- Tool: Radon -->
+      <rect x="425" y="122" width="140" height="72" rx="8" fill="#EFF6FF" stroke="#3B82F6" stroke-width="1.5"/>
+      <text x="495" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#1E40AF">Radon</text>
+      <text x="495" y="160" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#1E40AF">Complexity</text>
+      <text x="495" y="176" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#1D4ED8">$ radon cc src/</text>
+
+      <!-- Tool: pip-audit -->
+      <rect x="610" y="122" width="140" height="72" rx="8" fill="#F5F3FF" stroke="#8B5CF6" stroke-width="1.5"/>
+      <text x="680" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#5B21B6">pip-audit</text>
+      <text x="680" y="160" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#5B21B6">Dependencies</text>
+      <text x="680" y="176" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6D28D9">$ pip-audit</text>
+
+      <!-- Arrows to output files -->
+      <line x1="100" y1="194" x2="100" y2="216" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="285" y1="194" x2="285" y2="216" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="495" y1="194" x2="495" y2="216" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="680" y1="194" x2="680" y2="216" stroke="#9CA3AF" stroke-width="1.5" marker-end="url(#a1)"/>
+
+      <!-- Output files -->
+      <rect x="30" y="216" width="140" height="44" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="100" y="234" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">security_report.txt</text>
+      <text x="100" y="250" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#EF4444" font-weight="600">No history</text>
+
+      <rect x="215" y="216" width="140" height="44" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="285" y="234" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">pylint_output.json</text>
+      <text x="285" y="250" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#EF4444" font-weight="600">No history</text>
+
+      <rect x="425" y="216" width="140" height="44" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="495" y="234" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">cc_report.json</text>
+      <text x="495" y="250" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#EF4444" font-weight="600">No history</text>
+
+      <rect x="610" y="216" width="140" height="44" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="680" y="234" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">audit_output.json</text>
+      <text x="680" y="250" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#EF4444" font-weight="600">No history</text>
+
+      <!-- Collection bar + manual aggregation -->
+      <line x1="100" y1="260" x2="100" y2="282" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#a2)"/>
+      <line x1="285" y1="260" x2="285" y2="282" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#a2)"/>
+      <line x1="495" y1="260" x2="495" y2="282" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#a2)"/>
+      <line x1="680" y1="260" x2="680" y2="282" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#a2)"/>
+      <line x1="100" y1="282" x2="680" y2="282" stroke="#DC2626" stroke-width="1.5" stroke-dasharray="4 2"/>
+      <line x1="390" y1="282" x2="390" y2="300" stroke="#DC2626" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <!-- Manual aggregation box -->
+      <rect x="240" y="300" width="300" height="46" rx="9" fill="#FEE2E2" stroke="#DC2626" stroke-width="2"/>
+      <text x="390" y="318" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#B91C1C">You — manual aggregation</text>
+      <text x="390" y="336" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#EF4444">4 terminal windows · 4 formats · zero context</text>
+    </svg>
+    <div class="diagram-cap">Fig 1 — The current state: four tools, four output formats, no shared history. The developer is the only connection between them.</div>
+  </div>
+
+  <div class="note note-err">
+    <div class="note-lbl">The Real Cost</div>
+    <p>Studies of developer tool context-switching estimate 15–25 minutes of lost focus per unplanned tool switch. Running four separate audit tools after each significant commit costs an estimated 2–4 hours per developer per week in aggregate — not counting the time to manually reconcile findings and build trend reports.</p>
+  </div>
+
+  <h3>The Specific Gaps That Nexus Audit V3 Closes</h3>
+  <ul>
+    <li><strong>No unified score.</strong> Each tool has its own grading scale. There is no single number that answers "is this codebase getting better or worse?"</li>
+    <li><strong>No trend data.</strong> Running Bandit today and again next week gives you two snapshots with no automatic diff, no persistence, no history.</li>
+    <li><strong>No fix queue.</strong> When 47 findings exist, there is no ranked, state-tracked list of what to fix first. Every run starts from zero.</li>
+    <li><strong>No coupling analysis.</strong> No existing lightweight tool maps inter-module dependencies and flags architectural drift as a first-class metric.</li>
+    <li><strong>Fragmented CI integration.</strong> Each tool needs its own CI step, its own artifact upload, its own threshold configuration.</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════ SECTION 2 ═══════════════════════════ -->
+<section class="sec" id="s2">
+  <div class="sec-num">Section 02</div>
+  <h2>The Solution — What Nexus Audit V3 Delivers</h2>
+  <p>Nexus Audit V3 replaces the fragmented airport with a single control tower. One command. One score. One persistent, locally-owned archive that grows richer with every run.</p>
+
+  <!-- SVG 2: The Nexus Solution -->
+  <div class="diagram">
+    <svg viewBox="0 0 780 340" xmlns="http://www.w3.org/2000/svg" role="img">
+      <title>Nexus Audit V3 — unified local-first platform</title>
+      <defs>
+        <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M1 1L9 5L1 9" fill="none" stroke="#1D4ED8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+        <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M1 1L9 5L1 9" fill="none" stroke="#15803D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Background -->
+      <rect x="1" y="1" width="778" height="338" rx="11" fill="#F0FDF4" stroke="#BBF7D0" stroke-width="1.5"/>
+      <text x="389" y="24" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#16A34A" letter-spacing="1">NEXUS AUDIT V3 — ONE COMMAND, FULL LOCAL HISTORY</text>
+
+      <!-- Codebase -->
+      <rect x="289" y="36" width="202" height="44" rx="8" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.5"/>
+      <text x="390" y="54" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#14532D">Your Codebase</text>
+      <text x="390" y="70" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#166534">$ nexus audit .</text>
+
+      <!-- Arrow to Nexus engine -->
+      <line x1="390" y1="80" x2="390" y2="108" stroke="#1D4ED8" stroke-width="2" marker-end="url(#b1)"/>
+
+      <!-- Nexus Engine — central box -->
+      <rect x="150" y="108" width="480" height="84" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="2"/>
+      <text x="390" y="132" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="#1E40AF">Nexus Audit V3 Engine</text>
+      <text x="390" y="152" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" fill="#2563EB">Security Analysis · Code Quality · Complexity · Dependency Audit · Architecture Coupling</text>
+      <text x="390" y="170" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#3B82F6">Zero setup · Local-first · Runs in &lt; 30 seconds · Full historical state</text>
+
+      <!-- Distribution from Nexus -->
+      <line x1="390" y1="192" x2="390" y2="212" stroke="#1D4ED8" stroke-width="2"/>
+      <line x1="90" y1="212" x2="690" y2="212" stroke="#1D4ED8" stroke-width="1.5"/>
+      <line x1="90" y1="212" x2="90" y2="232" stroke="#1D4ED8" stroke-width="1.5" marker-end="url(#b1)"/>
+      <line x1="263" y1="212" x2="263" y2="232" stroke="#1D4ED8" stroke-width="1.5" marker-end="url(#b1)"/>
+      <line x1="516" y1="212" x2="516" y2="232" stroke="#15803D" stroke-width="1.5" marker-end="url(#b2)"/>
+      <line x1="690" y1="212" x2="690" y2="232" stroke="#15803D" stroke-width="1.5" marker-end="url(#b2)"/>
+
+      <!-- Output 1: Web Dashboard -->
+      <rect x="20" y="232" width="140" height="72" rx="8" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+      <text x="90" y="254" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#1E40AF">Web Dashboard</text>
+      <text x="90" y="270" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#3B82F6">Scores, trends</text>
+      <text x="90" y="284" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#3B82F6">Fix queue, diff</text>
+      <text x="90" y="296" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#60A5FA">localhost:7331</text>
+
+      <!-- Output 2: JSON Archive -->
+      <rect x="193" y="232" width="140" height="72" rx="8" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.5"/>
+      <text x="263" y="254" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#14532D">JSON Archive</text>
+      <text x="263" y="270" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#166534">Source of truth</text>
+      <text x="263" y="284" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#166534">Human-readable</text>
+      <text x="263" y="296" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#4ADE80">Portable · Yours</text>
+
+      <!-- Output 3: SQLite Index -->
+      <rect x="446" y="232" width="140" height="72" rx="8" fill="#DCFCE7" stroke="#15803D" stroke-width="1.5"/>
+      <text x="516" y="254" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#14532D">SQLite Index</text>
+      <text x="516" y="270" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#166534">O(log N) trends</text>
+      <text x="516" y="284" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#166534">WAL · concurrent</text>
+      <text x="516" y="296" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#4ADE80">Rebuildable</text>
+
+      <!-- Output 4: SARIF Export -->
+      <rect x="620" y="232" width="140" height="72" rx="8" fill="#F5F3FF" stroke="#7C3AED" stroke-width="1.5"/>
+      <text x="690" y="254" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#5B21B6">SARIF Export</text>
+      <text x="690" y="270" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6D28D9">GitHub · VS Code</text>
+      <text x="690" y="284" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6D28D9">GitLab · OASIS</text>
+      <text x="690" y="296" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#8B5CF6">Standard</text>
+
+      <!-- Footer label -->
+      <text x="389" y="326" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#16A34A" font-weight="600">All data stays on your machine. No accounts. No cloud. No setup beyond pip install.</text>
+    </svg>
+    <div class="diagram-cap">Fig 2 — The Nexus Audit V3 solution: one command produces a unified dashboard, a portable JSON archive, a fast SQLite query index, and standards-compliant SARIF output.</div>
+  </div>
+
+  <div class="cmp">
+    <div class="cmp-card">
+      <div class="cmp-label cmp-label-bad">Before — Fragmented</div>
+      <h4>Four tools, four invocations</h4>
+      <p>bandit + pylint + radon + pip-audit. Each command, each format, each report siloed. Manual aggregation by the developer. No history. No unified score.</p>
+    </div>
+    <div class="cmp-card winner">
+      <div class="cmp-label cmp-label-good">After — Nexus Audit V3</div>
+      <h4>One command: <code>nexus audit .</code></h4>
+      <p>Unified score. JSON archive. SQLite trend index. SARIF for CI. Fix queue with state. Structural diffs between any two runs. All local. All yours.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SECTION 3 ═══════════════════════════ -->
+<section class="sec" id="s3">
+  <div class="sec-num">Section 03</div>
+  <h2>Competitive Landscape</h2>
+  <p>Understanding how existing tools handle data persistence directly informs every storage decision in Nexus Audit V3. The following analysis covers the four most relevant tools — including their architecture diagrams.</p>
+
+  <!-- SVG 3: Storage complexity comparison -->
+  <div class="diagram">
+    <svg viewBox="0 0 780 310" xmlns="http://www.w3.org/2000/svg" role="img">
+      <title>Storage architecture complexity comparison across four tools</title>
+
+      <!-- Labels at top -->
+      <text x="100" y="22" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#374151">SonarQube</text>
+      <text x="280" y="22" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#374151">Semgrep CLI</text>
+      <text x="480" y="22" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#374151">Snyk</text>
+      <text x="660" y="22" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="700" fill="#2563EB">Nexus Audit V3</text>
+
+      <!-- Setup cost axis -->
+      <text x="10" y="140" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#9CA3AF" transform="rotate(-90,10,140)">Setup complexity ↑</text>
+      <line x1="24" y1="30" x2="24" y2="270" stroke="#E5E7EB" stroke-width="1"/>
+
+      <!-- SonarQube stack — tall = high complexity -->
+      <rect x="40" y="54" width="120" height="32" rx="5" fill="#FEE2E2" stroke="#FCA5A5" stroke-width="1"/>
+      <text x="100" y="72" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#DC2626">Elasticsearch</text>
+      <rect x="40" y="90" width="120" height="32" rx="5" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1"/>
+      <text x="100" y="108" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#D97706">PostgreSQL DB</text>
+      <rect x="40" y="126" width="120" height="32" rx="5" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1"/>
+      <text x="100" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#D97706">JVM + Compute Engine</text>
+      <rect x="40" y="162" width="120" height="32" rx="5" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="100" y="180" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#6B7280">sonar-scanner CLI</text>
+      <rect x="40" y="198" width="120" height="32" rx="5" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="100" y="216" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#374151">Your Codebase</text>
+      <text x="100" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#DC2626" font-weight="600">Setup: Days</text>
+      <text x="100" y="262" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6B7280">Local trends: Limited</text>
+      <text x="100" y="276" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6B7280">Portability: Poor</text>
+
+      <!-- Semgrep stack — flat = no persistence -->
+      <rect x="220" y="198" width="120" height="32" rx="5" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="280" y="216" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#374151">Your Codebase</text>
+      <rect x="220" y="162" width="120" height="32" rx="5" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1"/>
+      <text x="280" y="180" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#D97706">semgrep CLI</text>
+      <rect x="220" y="126" width="120" height="32" rx="5" fill="#E5E7EB" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 2"/>
+      <text x="280" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#9CA3AF">stdout / file only</text>
+      <text x="280" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#16A34A" font-weight="600">Setup: Minutes</text>
+      <text x="280" y="262" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6B7280">Local trends: None</text>
+      <text x="280" y="276" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6B7280">Portability: Output only</text>
+
+      <!-- Snyk stack — cloud -->
+      <rect x="420" y="198" width="120" height="32" rx="5" fill="#F3F4F6" stroke="#D1D5DB" stroke-width="1"/>
+      <text x="480" y="216" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#374151">Your Codebase</text>
+      <rect x="420" y="162" width="120" height="32" rx="5" fill="#FEF3C7" stroke="#FCD34D" stroke-width="1"/>
+      <text x="480" y="180" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#D97706">snyk CLI</text>
+      <line x1="480" y1="162" x2="480" y2="118" stroke="#9CA3AF" stroke-width="1" stroke-dasharray="4 2"/>
+      <rect x="420" y="82" width="120" height="36" rx="5" fill="#FEE2E2" stroke="#FCA5A5" stroke-width="1"/>
+      <text x="480" y="100" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#DC2626">☁ Snyk Cloud</text>
+      <text x="480" y="114" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#EF4444">Your data leaves machine</text>
+      <text x="480" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#16A34A" font-weight="600">Setup: Minutes</text>
+      <text x="480" y="262" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#6B7280">Local trends: None</text>
+      <text x="480" y="276" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#DC2626">Portability: Locked in</text>
+
+      <!-- Nexus Audit V3 stack -->
+      <rect x="600" y="198" width="120" height="32" rx="5" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.5"/>
+      <text x="660" y="216" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#14532D">Your Codebase</text>
+      <rect x="600" y="162" width="120" height="32" rx="5" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+      <text x="660" y="180" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#1E40AF">Nexus Engine</text>
+      <rect x="600" y="126" width="120" height="32" rx="5" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.5"/>
+      <text x="660" y="144" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#14532D">JSON Archive</text>
+      <rect x="600" y="90" width="120" height="32" rx="5" fill="#DCFCE7" stroke="#15803D" stroke-width="1.5"/>
+      <text x="660" y="108" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#14532D">SQLite Index</text>
+      <text x="660" y="248" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#16A34A" font-weight="600">Setup: Seconds</text>
+      <text x="660" y="262" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#16A34A" font-weight="600">Local trends: Full</text>
+      <text x="660" y="276" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" fill="#16A34A" font-weight="600">Portability: Complete</text>
+    </svg>
+    <div class="diagram-cap">Fig 3 — Stack height represents setup complexity. Only Nexus Audit V3 offers full local trend analysis with zero-friction setup and complete data portability.</div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Tool</th><th>Storage Model</th><th>Local History</th><th>Setup Cost</th><th>Portability</th><th>Offline?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>SonarQube</strong></td>
+          <td>PostgreSQL + Elasticsearch server</td>
+          <td class="td-warn">Limited queries</td>
+          <td class="td-bad">Days (provision DB, JVM, ES)</td>
+          <td class="td-bad">DB dump only</td>
+          <td class="td-warn">Server needed</td>
+        </tr>
+        <tr>
+          <td><strong>Semgrep</strong></td>
+          <td>Stateless — stdout / file only</td>
+          <td class="td-bad">None (paid SaaS only)</td>
+          <td class="td-good">Minutes</td>
+          <td class="td-good">JSON/SARIF output</td>
+          <td class="td-good">Yes</td>
+        </tr>
+        <tr>
+          <td><strong>Snyk</strong></td>
+          <td>Cloud database (data leaves machine)</td>
+          <td class="td-bad">Cloud only</td>
+          <td class="td-good">Minutes (with account)</td>
+          <td class="td-bad">Locked in cloud</td>
+          <td class="td-bad">No</td>
+        </tr>
+        <tr>
+          <td><strong>Grype</strong></td>
+          <td>SQLite for vuln DB · JSON scan output</td>
+          <td class="td-bad">None</td>
+          <td class="td-good">Minutes</td>
+          <td class="td-good">JSON/SARIF output</td>
+          <td class="td-good">Yes (cached DB)</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--blue)">Nexus Audit V3</strong></td>
+          <td>JSON archive + SQLite trend index (local)</td>
+          <td class="td-good">Full — unlimited runs</td>
+          <td class="td-good">Seconds (pip install)</td>
+          <td class="td-good">Complete — zip &amp; share</td>
+          <td class="td-good">Yes — everything local</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SECTION 4 ═══════════════════════════ -->
+<section class="sec" id="s4">
+  <div class="sec-num">Section 04</div>
+  <h2>Storage Architecture Specification</h2>
+
+  <h3>Directory Structure</h3>
+  <pre><code>~/.nexus_audit/
+├── projects/
+│   └── &lt;project_id&gt;/           <span class="cm"># SHA-256 of the project root path</span>
+│       ├── nexus_state.db       <span class="cm"># SQLite index — queryable, rebuildable</span>
+│       └── jobs/
+│           └── &lt;job_id&gt;/       <span class="cm"># ISO-8601 timestamp + random suffix</span>
+│               ├── audit_data_complete.json   <span class="cm"># Full payload — source of truth</span>
+│               └── audit_summary.json         <span class="cm"># Lightweight — for fast trend reads</span>
+└── config.json                  <span class="cm"># Global configuration</span></code></pre>
+
+  <div class="note note-key">
+    <div class="note-lbl">Immutability Guarantee</div>
+    <p>Once written, job directories are <strong>never modified</strong>. Every run produces a new directory. The retention policy deletes the <em>oldest</em> directories when <code>max_jobs</code> is exceeded — it never edits existing ones. This makes the archive trustworthy as an audit log.</p>
+  </div>
+
+  <h3>audit_summary.json — Schema</h3>
+  <p>Written after every run. The primary input for trend queries. Kept small (&lt; 50KB for typical projects) so that loading 300 summaries completes in under 200ms.</p>
+  <pre><code>{
+  <span class="st">"schema_version"</span>: <span class="st">"3.0"</span>,
+  <span class="st">"job_id"</span>: <span class="st">"2026-06-15T14:32:01Z_a3f9c2b"</span>,
+  <span class="st">"project_id"</span>: <span class="st">"sha256:8f3a..."</span>,
+  <span class="st">"project_path"</span>: <span class="st">"/home/user/projects/myapp"</span>,
+  <span class="st">"git"</span>: {
+    <span class="st">"commit"</span>: <span class="st">"a3f9c2b"</span>,
+    <span class="st">"branch"</span>: <span class="st">"feature/auth-refactor"</span>,
+    <span class="st">"author"</span>: <span class="st">"alice@example.com"</span>,
+    <span class="st">"dirty"</span>: <span class="nm">false</span>
+  },
+  <span class="st">"scores"</span>: {
+    <span class="st">"overall"</span>: <span class="nm">82.4</span>,
+    <span class="st">"security"</span>: <span class="nm">78.1</span>,
+    <span class="st">"quality"</span>: <span class="nm">88.0</span>,
+    <span class="st">"complexity"</span>: <span class="nm">83.5</span>,
+    <span class="st">"dependencies"</span>: <span class="nm">81.2</span>
+  },
+  <span class="st">"counts"</span>: {
+    <span class="st">"total"</span>: <span class="nm">47</span>,
+    <span class="st">"critical"</span>: <span class="nm">1</span>,
+    <span class="st">"high"</span>: <span class="nm">5</span>,
+    <span class="st">"medium"</span>: <span class="nm">18</span>,
+    <span class="st">"low"</span>: <span class="nm">23</span>
+  },
+  <span class="st">"finding_fingerprints"</span>: [<span class="st">"sha256:abc1"</span>, <span class="st">"sha256:def2"</span>, <span class="cm">/* ... */</span>],
+  <span class="st">"duration_ms"</span>: <span class="nm">4820</span>,
+  <span class="st">"timestamp"</span>: <span class="st">"2026-06-15T14:32:06Z"</span>
+}</code></pre>
+
+  <h3>SQLite Index — Schema &amp; WAL Configuration</h3>
+  <p>The SQLite file at <code>~/.nexus_audit/projects/&lt;id&gt;/nexus_state.db</code> is a queryable index over the JSON archives. It is always rebuildable; it is never the source of truth.</p>
+
+  <h4>Mandatory initialization pragmas (run on every DB open)</h4>
+  <pre><code><span class="kw">PRAGMA</span> journal_mode = WAL;        <span class="cm">-- Concurrent reads during writes</span>
+<span class="kw">PRAGMA</span> synchronous = NORMAL;      <span class="cm">-- Reduce fsync wait without losing durability</span>
+<span class="kw">PRAGMA</span> busy_timeout = 5000;       <span class="cm">-- Wait 5s for locks instead of crashing</span>
+<span class="kw">PRAGMA</span> foreign_keys = ON;
+<span class="kw">PRAGMA</span> cache_size = -8000;        <span class="cm">-- 8MB cache</span></code></pre>
+
+  <h4>Schema</h4>
+  <pre><code><span class="kw">CREATE TABLE IF NOT EXISTS</span> runs (
+  run_id          <span class="nm">TEXT</span>    <span class="kw">PRIMARY KEY</span>,
+  project_id      <span class="nm">TEXT</span>    <span class="kw">NOT NULL</span>,
+  timestamp       <span class="nm">INTEGER NOT NULL</span>,          <span class="cm">-- Unix epoch seconds</span>
+  job_dir         <span class="nm">TEXT</span>    <span class="kw">NOT NULL</span>,          <span class="cm">-- Pointer back to JSON files</span>
+  git_commit      <span class="nm">TEXT</span>,
+  git_branch      <span class="nm">TEXT</span>,
+  git_author      <span class="nm">TEXT</span>,
+  score_overall   <span class="nm">REAL</span>,
+  score_security  <span class="nm">REAL</span>,
+  score_quality   <span class="nm">REAL</span>,
+  score_complexity<span class="nm">REAL</span>,
+  score_deps      <span class="nm">REAL</span>,
+  count_total     <span class="nm">INTEGER</span>,
+  count_critical  <span class="nm">INTEGER</span>,
+  count_high      <span class="nm">INTEGER</span>,
+  duration_ms     <span class="nm">INTEGER</span>
+);
+
+<span class="kw">CREATE TABLE IF NOT EXISTS</span> findings (
+  fingerprint     <span class="nm">TEXT</span>    <span class="kw">NOT NULL</span>,
+  run_id          <span class="nm">TEXT</span>    <span class="kw">REFERENCES</span> runs(run_id),
+  category        <span class="nm">TEXT</span>,                         <span class="cm">-- security | quality | complexity | deps</span>
+  severity        <span class="nm">TEXT</span>,                         <span class="cm">-- critical | high | medium | low</span>
+  rule_id         <span class="nm">TEXT</span>,
+  file_path       <span class="nm">TEXT</span>,
+  git_pointer     <span class="nm">TEXT</span>,                         <span class="cm">-- JSON: {commit, lines:[start,end]}</span>
+  first_seen      <span class="nm">TEXT</span>    <span class="kw">REFERENCES</span> runs(run_id),
+  status          <span class="nm">TEXT</span>    <span class="kw">DEFAULT</span> <span class="st">'open'</span>,       <span class="cm">-- open | suppressed | resolved</span>
+  suppressed_until<span class="nm">INTEGER</span>                        <span class="cm">-- Unix epoch: snooze expiry</span>
+);
+
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> idx_runs_project   <span class="kw">ON</span> runs(project_id, timestamp <span class="kw">DESC</span>);
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> idx_findings_fp    <span class="kw">ON</span> findings(fingerprint);
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> idx_findings_run   <span class="kw">ON</span> findings(run_id);
+<span class="kw">CREATE INDEX IF NOT EXISTS</span> idx_findings_file  <span class="kw">ON</span> findings(file_path);</code></pre>
+
+  <div class="note note-info">
+    <div class="note-lbl">Why Git Pointers, Not Code Snippets</div>
+    <p>The <code>git_pointer</code> column stores <code>{"commit":"a3f9c2b","lines":[42,48]}</code> rather than copying source code into the database. This means the dashboard always renders the live file — not a stale snapshot from scan time — and keeps the database size proportional to findings count, not codebase size.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SECTION 5 ═══════════════════════════ -->
+<section class="sec" id="s5">
+  <div class="sec-num">Section 05</div>
+  <h2>CLI Specification</h2>
+  <p>All commands follow the pattern <code>nexus &lt;command&gt; [target] [flags]</code>. The tool is usable without any flags — sensible defaults apply everywhere.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>Description</th><th>Key Flags</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>nexus audit [path]</code></td>
+          <td>Run a full audit. Writes JSON archive and upserts SQLite index.</td>
+          <td><code>--watch</code> live mode · <code>--fast</code> summary only · <code>--json</code> stdout</td>
+        </tr>
+        <tr>
+          <td><code>nexus diff &lt;run_a&gt; &lt;run_b&gt;</code></td>
+          <td>Structural diff between two audit runs. Shows score delta, new/resolved findings, coupling changes.</td>
+          <td><code>--format sarif|json|text</code> · <code>--severity HIGH+</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus trend [--last N]</code></td>
+          <td>Score trend for the last N runs. Reads from SQLite index in O(log N).</td>
+          <td><code>--since 30d</code> · <code>--branch main</code> · <code>--csv</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus queue</code></td>
+          <td>Show the ranked fix queue: open findings ordered by severity × age × recurrence.</td>
+          <td><code>--snooze &lt;fp&gt; 30d</code> · <code>--resolve &lt;fp&gt;</code> · <code>--assign &lt;fp&gt; alice</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus export</code></td>
+          <td>Export audit history in interoperable formats.</td>
+          <td><code>--format sarif|json|csv</code> · <code>--since 90d</code> · <code>--runs 50</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus rebuild-index</code></td>
+          <td>Replay all JSON archives in the current project and regenerate nexus_state.db from scratch.</td>
+          <td><code>--dry-run</code> · <code>--verbose</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus clean</code></td>
+          <td>Remove old job directories per retention policy.</td>
+          <td><code>--keep 100</code> · <code>--dry-run</code></td>
+        </tr>
+        <tr>
+          <td><code>nexus serve</code></td>
+          <td>Start the local web dashboard.</td>
+          <td><code>--port 7331</code> · <code>--open</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Exit Codes</h3>
+  <pre><code>0  Clean — score above threshold, no new CRITICAL/HIGH findings
+1  Warning — new findings exist below threshold
+2  Fail — new CRITICAL findings or score dropped below configured minimum
+3  Error — tool failure (permissions, parse error, etc.)</code></pre>
+</section>
+
+<!-- ═══════════════════════════ SECTION 6 ═══════════════════════════ -->
+<section class="sec" id="s6">
+  <div class="sec-num">Section 06</div>
+  <h2>Killer Features</h2>
+  <p>These three capabilities differentiate Nexus Audit V3 from every existing tool. They are only possible because of the local-first JSON archive design.</p>
+
+  <div class="feat-list">
+    <div class="feat killer">
+      <div class="feat-icon">⚡</div>
+      <div class="feat-body">
+        <h4>nexus diff — Structural Audit Diffs</h4>
+        <p>Compare any two audit runs to produce a structured changelog: which findings are new, which were resolved, which scores improved or regressed, and which inter-module coupling edges appeared or disappeared. Answers the question every developer has after a score drop: <em>"what specifically changed, and in whose commit?"</em> No other local-first tool does this today.</p>
+      </div>
+    </div>
+    <div class="feat killer">
+      <div class="feat-icon">🔄</div>
+      <div class="feat-body">
+        <h4>rebuild-index — Zero-Risk Database</h4>
+        <p>If the SQLite index is ever deleted, corrupted, or migrated to a new schema, a single command replays every JSON archive and reconstructs it from scratch. This makes SQLite a read-optimized performance cache — never a single point of failure. JSON files are always the source of truth. Developers who are cautious about databases can rely on this guarantee.</p>
+      </div>
+    </div>
+    <div class="feat killer">
+      <div class="feat-icon">🔗</div>
+      <div class="feat-body">
+        <h4>SARIF Export — Universal Compatibility</h4>
+        <p>SARIF (Static Analysis Results Interchange Format) is the OASIS standard consumed natively by GitHub Code Scanning, VS Code's Problems panel, GitLab's Security Dashboard, and Azure DevOps. One command exports Nexus Audit findings in SARIF so they appear inline in pull requests, in the editor gutter, and in enterprise security dashboards — with zero additional integration work.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>nexus diff — Example Output</h3>
+  <pre><code>$ nexus diff job_2026-06-08 job_2026-06-15
+
+Score delta: overall -9.2  (security -14.1 | quality +4.9)
+
+NEW findings (8 total):
+  ● CRITICAL  sql_injection          auth/login.py:87        a3f9c2b (alice, 2d ago)
+  ● HIGH      hardcoded_secret       api/config.py:12        a3f9c2b (alice, 2d ago)
+  ● HIGH      path_traversal         api/upload.py:44        a3f9c2b (alice, 2d ago)
+  ● MEDIUM    missing_auth_check     api/admin.py:103        a3f9c2b (alice, 2d ago)
+  ... +4 more (LOW)
+
+RESOLVED findings (3 total):
+  ✓  HIGH   deprecated_hash         auth/legacy.py:33
+  ✓  MEDIUM unused_import            utils/helpers.py:7
+  ✓  LOW    missing_docstring        models/user.py:18
+
+Coupling changes:
+  + auth → payments  (new edge — potential regression)
+  - utils → database (removed edge — improved isolation)
+
+Probable cause: 8 changed files in commit a3f9c2b (Alice Chen, 2026-06-13)</code></pre>
+
+  <h3>SARIF Export — Integration Points</h3>
+  <pre><code><span class="cm"># Export last 90 days as SARIF for GitHub upload</span>
+$ nexus export --format sarif --since 90d --output nexus.sarif
+
+<span class="cm"># In your CI workflow (.github/workflows/audit.yml)</span>
+<span class="kw">- name:</span> Run Nexus Audit
+  <span class="kw">run:</span> |
+    nexus audit .
+    nexus export --format sarif --runs 1 --output nexus.sarif
+
+<span class="kw">- name:</span> Upload to GitHub Code Scanning
+  <span class="kw">uses:</span> github/codeql-action/upload-sarif@v3
+  <span class="kw">with:</span>
+    <span class="kw">sarif_file:</span> nexus.sarif</code></pre>
+</section>
+
+<!-- ═══════════════════════════ SECTION 7 ═══════════════════════════ -->
+<section class="sec" id="s7">
+  <div class="sec-num">Section 07</div>
+  <h2>Implementation Guide</h2>
+  <p>This section is written for developers who are new to the codebase, or who are cautious about the storage decisions. Every step explains <em>why</em>, not just <em>what</em>. Take it one phase at a time — each phase is independently shippable.</p>
+
+  <div class="note note-win">
+    <div class="note-lbl">If you are feeling uncertain</div>
+    <p>Start with Phase 1 only. JSON-only storage is a fully working product. Phases 2–4 are additive improvements you can ship when you are ready. Nothing in Phase 2 breaks Phase 1. The JSON files you write in Phase 1 will still be readable in Phase 4.</p>
+  </div>
+
+  <h3>Phase 1 — JSON-Only Storage (Ship This First)</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Create the project directory structure</h4>
+        <p>On first run, detect the project root (walk up from CWD until you find a <code>.git</code> directory or reach <code>/</code>). Compute the project ID as <code>sha256(str(project_root))[:16]</code>. Create <code>~/.nexus_audit/projects/&lt;id&gt;/jobs/</code>. This never fails — it is just <code>Path.mkdir(parents=True, exist_ok=True)</code>.</p>
+        <pre><code><span class="kw">import</span> hashlib, os
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+
+<span class="kw">def</span> project_dir(project_root: Path) -> Path:
+    pid = hashlib.sha256(str(project_root).encode()).hexdigest()[:16]
+    d = Path.home() / <span class="st">".nexus_audit"</span> / <span class="st">"projects"</span> / pid
+    d.mkdir(parents=True, exist_ok=True)
+    <span class="kw">return</span> d</code></pre>
+        <div class="checkpoint">Directory created, no errors thrown on a clean machine.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Generate a job ID and write the JSON archive</h4>
+        <p>Use ISO-8601 timestamp + git short hash for the job ID — human-readable and sortable. Write <code>audit_data_complete.json</code> atomically: write to a <code>.tmp</code> file first, then <code>os.replace()</code> to the final path. This prevents a corrupted file if the process is killed mid-write.</p>
+        <pre><code><span class="kw">import</span> json, time
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime, timezone
+
+<span class="kw">def</span> write_audit(project_dir: Path, payload: dict) -> Path:
+    ts = datetime.now(timezone.utc).strftime(<span class="st">"%Y-%m-%dT%H-%M-%SZ"</span>)
+    commit = payload.get(<span class="st">"git"</span>, {}).get(<span class="st">"commit"</span>, <span class="st">"unknown"</span>)[:7]
+    job_id = f<span class="st">"{ts}_{commit}"</span>
+    job_dir = project_dir / <span class="st">"jobs"</span> / job_id
+    job_dir.mkdir(parents=True)
+
+    <span class="cm"># Atomic write — never leaves a half-written file</span>
+    tmp = job_dir / <span class="st">"audit_data_complete.json.tmp"</span>
+    tmp.write_text(json.dumps(payload, indent=2))
+    os.replace(tmp, job_dir / <span class="st">"audit_data_complete.json"</span>)
+
+    <span class="cm"># Write lightweight summary for fast trend reads</span>
+    summary = {k: payload[k] <span class="kw">for</span> k <span class="kw">in</span> [<span class="st">"scores"</span>, <span class="st">"counts"</span>, <span class="st">"git"</span>, <span class="st">"timestamp"</span>]}
+    summary[<span class="st">"finding_fingerprints"</span>] = [f[<span class="st">"fingerprint"</span>] <span class="kw">for</span> f <span class="kw">in</span> payload[<span class="st">"findings"</span>]]
+    (job_dir / <span class="st">"audit_summary.json"</span>).write_text(json.dumps(summary, indent=2))
+    <span class="kw">return</span> job_dir</code></pre>
+        <div class="checkpoint">After running an audit, two JSON files exist in the job directory. <code>cat</code> them — they should be human-readable.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Implement trend queries using summary files</h4>
+        <p>For Phase 1, trend queries read and parse the summary files in a directory listing. This is O(N) — sufficient for up to ~150 runs. Sort job directories by name (ISO timestamp prefix means alphabetical = chronological).</p>
+        <pre><code><span class="kw">def</span> load_trends(project_dir: Path, limit: int = 50) -> list[dict]:
+    jobs_dir = project_dir / <span class="st">"jobs"</span>
+    job_dirs = sorted(jobs_dir.iterdir(), key=<span class="kw">lambda</span> p: p.name, reverse=True)[:limit]
+    results = []
+    <span class="kw">for</span> job_dir <span class="kw">in</span> reversed(job_dirs):
+        summary_path = job_dir / <span class="st">"audit_summary.json"</span>
+        <span class="kw">if</span> summary_path.exists():
+            results.append(json.loads(summary_path.read_text()))
+    <span class="kw">return</span> results</code></pre>
+        <div class="checkpoint">Phase 1 is complete and shippable. Stop here if you want to validate the product before adding more complexity.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase 2 — SQLite Index</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Open the database with production pragmas</h4>
+        <p>Always run these pragmas immediately after <code>connect()</code>. They take microseconds but prevent entire classes of concurrency and durability bugs. Write this as a context manager so you cannot forget.</p>
+        <pre><code><span class="kw">import</span> sqlite3
+<span class="kw">from</span> contextlib <span class="kw">import</span> contextmanager
+
+<span class="kw">@contextmanager</span>
+<span class="kw">def</span> db(project_dir: Path):
+    path = project_dir / <span class="st">"nexus_state.db"</span>
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    conn.executescript(<span class="st">"""
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = NORMAL;
+        PRAGMA busy_timeout = 5000;
+        PRAGMA foreign_keys = ON;
+        PRAGMA cache_size = -8000;
+    """</span>)
+    <span class="kw">try</span>:
+        <span class="kw">yield</span> conn
+        conn.commit()
+    <span class="kw">except Exception</span>:
+        conn.rollback()
+        <span class="kw">raise</span>
+    <span class="kw">finally</span>:
+        conn.close()</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Implement rebuild-index before you write the upsert</h4>
+        <p>Write <code>rebuild-index</code> <em>first</em>. This validates that your schema is correct before any real data goes in, and gives you the safety net that makes all subsequent work less risky. It is also the correct mental model: SQLite is always derivative of JSON.</p>
+        <pre><code><span class="kw">def</span> rebuild_index(project_dir: Path):
+    <span class="st">"""Replay all JSON archives → rebuild SQLite from scratch."""</span>
+    db_path = project_dir / <span class="st">"nexus_state.db"</span>
+    <span class="kw">if</span> db_path.exists():
+        db_path.rename(db_path.with_suffix(<span class="st">".db.bak"</span>))  <span class="cm"># Safety copy</span>
+
+    <span class="kw">with</span> db(project_dir) <span class="kw">as</span> conn:
+        _create_schema(conn)
+        jobs_dir = project_dir / <span class="st">"jobs"</span>
+        <span class="kw">for</span> job_dir <span class="kw">in</span> sorted(jobs_dir.iterdir()):
+            summary = job_dir / <span class="st">"audit_summary.json"</span>
+            <span class="kw">if</span> summary.exists():
+                _upsert_run(conn, json.loads(summary.read_text()), job_dir)
+
+    db_path.with_suffix(<span class="st">".db.bak"</span>).unlink(missing_ok=True)  <span class="cm"># Clean up</span>
+    print(f<span class="st">"Index rebuilt from {len(list(jobs_dir.iterdir()))} runs."</span>)</code></pre>
+        <div class="checkpoint">Run rebuild-index on a project with existing JSON files. The SQLite file should be created. Run it twice — the second run should produce the same file.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Add the upsert call to the audit pipeline</h4>
+        <p>After the JSON files are written (Phase 1 code, unchanged), call the upsert function. This is the only code change to the audit path in Phase 2 — everything else is additive.</p>
+        <pre><code><span class="kw">def</span> _upsert_run(conn, summary: dict, job_dir: Path):
+    conn.execute(<span class="st">"""
+        INSERT OR REPLACE INTO runs
+        (run_id, project_id, timestamp, job_dir,
+         git_commit, git_branch, git_author,
+         score_overall, score_security, score_quality,
+         score_complexity, score_deps,
+         count_total, count_critical, count_high, duration_ms)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """</span>, (
+        summary[<span class="st">"job_id"</span>],
+        summary[<span class="st">"project_id"</span>],
+        int(datetime.fromisoformat(summary[<span class="st">"timestamp"</span>]).timestamp()),
+        str(job_dir),
+        summary.get(<span class="st">"git"</span>, {}).get(<span class="st">"commit"</span>),
+        summary.get(<span class="st">"git"</span>, {}).get(<span class="st">"branch"</span>),
+        summary.get(<span class="st">"git"</span>, {}).get(<span class="st">"author"</span>),
+        summary[<span class="st">"scores"</span>][<span class="st">"overall"</span>],
+        summary[<span class="st">"scores"</span>][<span class="st">"security"</span>],
+        summary[<span class="st">"scores"</span>][<span class="st">"quality"</span>],
+        summary[<span class="st">"scores"</span>][<span class="st">"complexity"</span>],
+        summary[<span class="st">"scores"</span>][<span class="st">"dependencies"</span>],
+        summary[<span class="st">"counts"</span>][<span class="st">"total"</span>],
+        summary[<span class="st">"counts"</span>][<span class="st">"critical"</span>],
+        summary[<span class="st">"counts"</span>][<span class="st">"high"</span>],
+        summary.get(<span class="st">"duration_ms"</span>)
+    ))</code></pre>
+        <div class="checkpoint">After a new audit run, query the SQLite file with any SQLite browser. The run should appear in the <code>runs</code> table.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase 3 — nexus diff</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-n"></div>
+      <div class="step-body">
+        <h4>Load both JSON archives and diff the finding sets</h4>
+        <p>The fingerprints in each <code>audit_summary.json</code> are enough to compute which findings are new and which were resolved. Load the full payload from <code>audit_data_complete.json</code> only for findings that need detail.</p>
+        <pre><code><span class="kw">def</span> diff_runs(job_dir_a: Path, job_dir_b: Path) -> dict:
+    a = json.loads((job_dir_a / <span class="st">"audit_summary.json"</span>).read_text())
+    b = json.loads((job_dir_b / <span class="st">"audit_summary.json"</span>).read_text())
+
+    fps_a = set(a[<span class="st">"finding_fingerprints"</span>])
+    fps_b = set(b[<span class="st">"finding_fingerprints"</span>])
+
+    new_fps     = fps_b - fps_a      <span class="cm"># In B but not A — new findings</span>
+    resolved_fps = fps_a - fps_b     <span class="cm"># In A but not B — resolved</span>
+    persisted_fps = fps_a & fps_b    <span class="cm"># In both — unchanged</span>
+
+    score_delta = {k: b[<span class="st">"scores"</span>][k] - a[<span class="st">"scores"</span>][k] <span class="kw">for</span> k <span class="kw">in</span> b[<span class="st">"scores"</span>]}
+
+    <span class="kw">return</span> {
+        <span class="st">"score_delta"</span>: score_delta,
+        <span class="st">"new_count"</span>: len(new_fps),
+        <span class="st">"resolved_count"</span>: len(resolved_fps),
+        <span class="st">"persisted_count"</span>: len(persisted_fps),
+        <span class="st">"new_fingerprints"</span>: list(new_fps),
+        <span class="st">"resolved_fingerprints"</span>: list(resolved_fps),
+    }</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <h3>Phase 4 — SARIF Export</h3>
+  <div class="note note-info">
+    <div class="note-lbl">SARIF 2.1.0 — Minimum Required Fields</div>
+    <p>SARIF is a JSON format. The minimum valid SARIF document needs: <code>version</code>, <code>$schema</code>, <code>runs[].tool.driver</code> (with <code>name</code> and <code>rules</code>), and <code>runs[].results</code> (each with <code>ruleId</code>, <code>message.text</code>, and <code>locations</code>). That is it. GitHub and VS Code accept any document that satisfies this minimum.</p>
+  </div>
+  <pre><code><span class="kw">def</span> to_sarif(findings: list[dict]) -> dict:
+    <span class="kw">return</span> {
+        <span class="st">"version"</span>: <span class="st">"2.1.0"</span>,
+        <span class="st">"$schema"</span>: <span class="st">"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"</span>,
+        <span class="st">"runs"</span>: [{
+            <span class="st">"tool"</span>: {<span class="st">"driver"</span>: {<span class="st">"name"</span>: <span class="st">"Nexus Audit V3"</span>, <span class="st">"version"</span>: <span class="st">"3.0.0"</span>, <span class="st">"rules"</span>: []}},
+            <span class="st">"results"</span>: [{
+                <span class="st">"ruleId"</span>: f[<span class="st">"rule_id"</span>],
+                <span class="st">"level"</span>: {<span class="st">"critical"</span>: <span class="st">"error"</span>, <span class="st">"high"</span>: <span class="st">"error"</span>, <span class="st">"medium"</span>: <span class="st">"warning"</span>, <span class="st">"low"</span>: <span class="st">"note"</span>}.get(f[<span class="st">"severity"</span>], <span class="st">"warning"</span>),
+                <span class="st">"message"</span>: {<span class="st">"text"</span>: f[<span class="st">"message"</span>]},
+                <span class="st">"locations"</span>: [{<span class="st">"physicalLocation"</span>: {<span class="st">"artifactLocation"</span>: {<span class="st">"uri"</span>: f[<span class="st">"file_path"</span>]}}}]
+            } <span class="kw">for</span> f <span class="kw">in</span> findings]
+        }]
+    }</code></pre>
+</section>
+
+<!-- ═══════════════════════════ SECTION 8 ═══════════════════════════ -->
+<section class="sec" id="s8">
+  <div class="sec-num">Section 08</div>
+  <h2>Performance Specification</h2>
+
+  <h3>Scale Thresholds</h3>
+  <p>The numbers below are based on the hybrid JSON + SQLite architecture. Phase 1 (JSON-only) degrades faster — the wall for trend queries appears around 150 runs with real-world 10–50KB summary files.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Dimension</th><th>Comfortable</th><th>Monitor This</th><th>Action Required</th></tr></thead>
+      <tbody>
+        <tr><td>Findings per run</td><td class="td-good">&lt; 5,000</td><td class="td-warn">10,000 – 30,000</td><td class="td-bad">&gt; 50,000 (payload &gt; 50MB)</td></tr>
+        <tr><td>Historical runs (JSON)</td><td class="td-good">&lt; 150</td><td class="td-warn">150 – 300</td><td class="td-bad">&gt; 300 (add SQLite)</td></tr>
+        <tr><td>Historical runs (SQLite)</td><td class="td-good">&lt; 1,000</td><td class="td-warn">1,000 – 5,000</td><td class="td-bad">&gt; 10,000 (implement archival)</td></tr>
+        <tr><td>Concurrent writers</td><td class="td-good">1 (normal)</td><td class="td-warn">2 (WAL handles this)</td><td class="td-bad">&gt; 5 simultaneous (team mode needed)</td></tr>
+        <tr><td>Summary file size</td><td class="td-good">&lt; 10KB</td><td class="td-warn">10 – 50KB</td><td class="td-bad">&gt; 100KB (optimise fingerprint list)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Target Latencies</h3>
+  <div class="scale-row">
+    <div class="scale-cell ok"><div class="val">&lt; 30s</div><div class="lbl">Full audit (typical project)</div></div>
+    <div class="scale-cell ok"><div class="val">&lt; 2ms</div><div class="lbl">Trend query (SQLite, 1000 runs)</div></div>
+    <div class="scale-cell ok"><div class="val">&lt; 100ms</div><div class="lbl">Dashboard load (cold)</div></div>
+    <div class="scale-cell warn"><div class="val">&lt; 5s</div><div class="lbl">rebuild-index (100 runs)</div></div>
+    <div class="scale-cell ok"><div class="val">&lt; 50ms</div><div class="lbl">nexus diff (any two runs)</div></div>
+    <div class="scale-cell ok"><div class="val">&lt; 1s</div><div class="lbl">SARIF export (90 days)</div></div>
+  </div>
+
+  <h3>Write Strategy: In-Memory Buffer with Debounced Flush</h3>
+  <p>For watch mode (<code>nexus audit --watch</code>), Nexus triggers a scan on file save. Writing the full JSON payload and updating SQLite on every save is wasteful. The correct pattern:</p>
+  <ol>
+    <li><strong>Scan completes → update in-memory state immediately.</strong> The dashboard reflects changes in microseconds, no disk I/O needed.</li>
+    <li><strong>Debounce for 3–5 seconds of file-save silence</strong>, then write the JSON archive and SQLite upsert as a single sequential operation.</li>
+    <li><strong>Multiple rapid saves in the debounce window become one write.</strong> This dramatically reduces disk writes without any perceptible dashboard lag.</li>
+  </ol>
+</section>
+
+<!-- ═══════════════════════════ SECTION 9 ═══════════════════════════ -->
+<section class="sec" id="s9">
+  <div class="sec-num">Section 09</div>
+  <h2>Appendix — Decisions &amp; Rationale</h2>
+  <p>This section documents every significant architectural choice with the reasoning behind it, so future contributors understand not just what was built but why alternatives were rejected.</p>
+
+  <h3>Decision Log</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Decision</th><th>Alternatives Rejected</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>JSON as source of truth</strong></td>
+          <td>SQLite only; PostgreSQL</td>
+          <td>Human-readable, zero-dependency, portable. A developer should be able to inspect any audit result with a text editor, 10 years from now, without any special software.</td>
+        </tr>
+        <tr>
+          <td><strong>SQLite as queryable index</strong></td>
+          <td>Re-parsing summaries; DuckDB; Redis</td>
+          <td>SQLite is a C library bundled in Python's stdlib. It requires zero setup, handles O(log N) indexed queries, and is already the precedent set by Grype for exactly this use case.</td>
+        </tr>
+        <tr>
+          <td><strong>Per-project SQLite file</strong></td>
+          <td>Single global <code>nexus_core.db</code></td>
+          <td>A per-project file travels with the project when zipped or shared. A global file is a new form of lock-in that undermines the portability value proposition.</td>
+        </tr>
+        <tr>
+          <td><strong>No PostgreSQL</strong></td>
+          <td>PostgreSQL + Elasticsearch (SonarQube model)</td>
+          <td>Provisioning PostgreSQL takes minutes to days and requires a running server process. This is the exact setup friction we are eliminating. There is no query complexity that warrants it at local-developer scale.</td>
+        </tr>
+        <tr>
+          <td><strong>Git pointer references, not code snippets</strong></td>
+          <td>Storing source code in the payload</td>
+          <td>Copying code into the database causes payload size to grow with codebase size, not findings count. Pointers are always accurate (they reference the live file) and keep payloads proportional.</td>
+        </tr>
+        <tr>
+          <td><strong>SARIF output over custom format</strong></td>
+          <td>Proprietary export formats</td>
+          <td>SARIF is the OASIS standard. GitHub, VS Code, GitLab, and Azure DevOps all consume it natively. Using it costs nothing and unlocks the entire developer toolchain ecosystem at launch.</td>
+        </tr>
+        <tr>
+          <td><strong>Immutable job directories</strong></td>
+          <td>Overwriting the last run's files</td>
+          <td>Immutability makes the archive trustworthy as an audit log. History is never lost. The retention policy only deletes the oldest jobs when the cap is hit — it never edits.</td>
+        </tr>
+        <tr>
+          <td><strong>WAL + NORMAL + busy_timeout pragmas</strong></td>
+          <td>Default SQLite settings</td>
+          <td>Default SQLite settings (DELETE journal mode, FULL synchronous) cause write lock contention in concurrent scenarios and unnecessary fsync overhead. The three pragmas are the minimal production-grade configuration.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Roadmap</h3>
+  <div class="road">
+    <div class="road-item done">
+      <div class="road-tag road-tag-done">Research Complete</div>
+      <h4>V3.0 — JSON-Only Storage</h4>
+      <p>Core audit engine, all five analysis modules, JSON archive, audit_summary.json, retention policy, web dashboard with trend charts. Zero external dependencies.</p>
+    </div>
+    <div class="road-item now">
+      <div class="road-tag road-tag-now">Current Sprint</div>
+      <h4>V3.1 — SQLite Index + rebuild-index</h4>
+      <p>Add nexus_state.db per project. Implement the schema, WAL pragmas, and upsert on each audit. Ship rebuild-index. Trend queries switch to SQLite. JSON remains source of truth.</p>
+    </div>
+    <div class="road-item next">
+      <div class="road-tag road-tag-next">Next Up</div>
+      <h4>V3.2 — nexus diff + SARIF Export</h4>
+      <p>Structural audit diffs between any two runs. SARIF 2.1.0 export for GitHub/VS Code/GitLab integration. Fix queue state management (snooze, resolve, assign).</p>
+    </div>
+    <div class="road-item">
+      <div class="road-tag" style="color:var(--ink3)">Planned</div>
+      <h4>V3.3 — Watch Mode + Branch Awareness</h4>
+      <p>In-memory ring buffer with debounced flush for watch mode. Branch-aware trend analysis: switch branches in git, dashboard instantly shows that branch's audit history.</p>
+    </div>
+    <div class="road-item">
+      <div class="road-tag" style="color:var(--ink3)">Future</div>
+      <h4>V4.0 — Team Mode</h4>
+      <p>Optional shared SQLite over a network share or S3-compatible bucket. Individual developers keep their local-first workflow; teams get a shared trend view without a database server.</p>
+    </div>
+  </div>
+
+  <hr>
+  <p style="font-size:13px;color:var(--ink3);text-align:center">Nexus Audit V3 — Technical Specification v3.0.0-spec · June 2026<br>This document is the authoritative implementation reference. Commit it alongside the code.</p>
+</section>
+
+</div>
+</body>
+</html>
