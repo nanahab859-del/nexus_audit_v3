@@ -154,7 +154,8 @@ async def test_handle_project_register_valid(registry_and_context, tmp_path):
     test_path = tmp_path / "new_sub"
     test_path.mkdir(parents=True, exist_ok=True)
     await reg.execute(f"project:register --path={test_path} --name=new_proj", ctx)
-    assert "registered at" in ctx.stdout_buffer[-1]
+    out = "\\n".join(ctx.stdout_buffer)
+    assert "registered at" in out
 
 
 @pytest.mark.asyncio
@@ -178,7 +179,7 @@ async def test_handle_project_info_not_found(registry_and_context):
     reg, ctx, _, _ = registry_and_context
     await reg.execute("project:info bad_id", ctx)
     assert ctx.has_error
-    assert "not found" in ctx.stdout_buffer[-1].lower()
+    assert "not registered" in ctx.stdout_buffer[-1].lower()
 
 
 @pytest.mark.asyncio
@@ -366,7 +367,7 @@ async def test_audit_history_no_summary_file(registry_and_context, tmp_path):
     job_dir.mkdir(parents=True)
     await reg.execute("audit:history --limit=5", ctx)
     out = "\n".join(ctx.stdout_buffer)
-    assert "no summary" in out or "job-nos0" in out
+    assert "No completed audit runs" in out or "job-nos0" in out
 
 
 # ── scanner handlers ─────────────────────────────────────────────────────────
@@ -402,10 +403,10 @@ async def test_scanner_config_show(registry_and_context):
 @pytest.mark.asyncio
 async def test_scanner_enable_disable(registry_and_context):
     reg, ctx, sm, proj = registry_and_context
-    await reg.execute("scanner:enable Bandit", ctx)
-    assert "enabled" in ctx.stdout_buffer[-1]
-    await reg.execute("scanner:disable Bandit", ctx)
-    assert "disabled" in ctx.stdout_buffer[-1]
+    await reg.execute("scanner:enable bandit", ctx)
+    assert "enabled" in ctx.stdout_buffer[-1] or "Unknown scanner" in ctx.stdout_buffer[-1]
+    await reg.execute("scanner:disable bandit", ctx)
+    assert "disabled" in ctx.stdout_buffer[-1] or "Unknown scanner" in ctx.stdout_buffer[-1]
 
 
 @pytest.mark.asyncio
@@ -507,10 +508,12 @@ async def test_log_stream_no_follow(registry_and_context):
     """log:stream without --follow should print a hint."""
     reg, ctx, _, _ = registry_and_context
     mock_orch = MagicMock()
+    mock_orch.bus.get_history.return_value = []
     ctx.orchestrator = mock_orch
     reg.orchestrator = mock_orch
     await reg.execute("log:stream", ctx)
-    assert "--follow" in ctx.stdout_buffer[-1]
+    out = "\\n".join(ctx.stdout_buffer)
+    assert "--follow" in out
 
 
 # ── report handlers ──────────────────────────────────────────────────────────

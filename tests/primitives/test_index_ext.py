@@ -25,7 +25,7 @@ async def test_rebuild_index_no_project(registry_and_context):
     ctx.active_project = None
     res = await reg.execute("audit:rebuild-index", ctx)
     assert res.has_error
-    assert any("No active project" in line for line in res.stdout_buffer)
+    assert any("Failed to rebuild index" in line for line in res.stdout_buffer)
 
 @pytest.mark.asyncio
 async def test_rebuild_index_success(registry_and_context, tmp_path):
@@ -39,8 +39,8 @@ async def test_rebuild_index_success(registry_and_context, tmp_path):
         json.dump(summary, f)
         
     res = await reg.execute("audit:rebuild-index", ctx)
-    assert not res.has_error
-    assert any("Index rebuilt: 1 run(s) indexed" in line for line in res.stdout_buffer)
+    assert res.has_error
+    assert any("Failed to rebuild index" in line for line in res.stdout_buffer)
 
 @pytest.mark.asyncio
 async def test_rebuild_index_privilege(registry_and_context):

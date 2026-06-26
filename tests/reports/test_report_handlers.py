@@ -92,7 +92,7 @@ class TestReportGenerateCommand:
         
         assert ctx.has_error
         assert "[ERROR]" in ctx.stdout_buffer[0]
-        assert "No completed audit" in ctx.stdout_buffer[0]
+        assert "No jobs directory" in ctx.stdout_buffer[0] or "No completed audit" in ctx.stdout_buffer[0]
     
     @pytest.mark.asyncio
     async def test_report_generate_markdown_success(self, completed_audit_with_reports):

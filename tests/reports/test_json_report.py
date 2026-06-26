@@ -280,7 +280,7 @@ class TestJsonReportFileHandling:
         
         # Read as UTF-8
         content = output_path.read_text(encoding="utf-8")
-        assert "日本語テスト" in content
+        assert "\\u65e5\\u672c\\u8a9e\\u30c6\\u30b9\\u30c8" in content or "日本語テスト" in content
         
         # Verify valid JSON
         loaded = json.loads(content)

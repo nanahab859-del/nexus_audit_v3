@@ -5,6 +5,7 @@ from pathlib import Path
 
 from core.infra.tool_resolver import ToolResolver, ToolNotFoundError
 from core.primitives.commands import CommandRegistry, CommandContext
+from core.primitives.commands.handlers.scanner import _handle_install
 from core.primitives.settings import SettingsManager
 from core.primitives.events import EventBus
 
@@ -89,28 +90,24 @@ async def test_tool_resolver_python_not_installed():
 
 @pytest.mark.asyncio
 async def test_scanner_install_python_command():
-    registry = CommandRegistry(None)
     ctx = DummyContext()
-    await registry._handle_scanner_install(ctx, {"name": "bandit"})
-    assert "To install bandit, run: pip install bandit" in ctx.output[0]
+    await _handle_install(ctx, {"name": "bandit"})
+    assert "pip install bandit" in ctx.output[0]
 
 @pytest.mark.asyncio
 async def test_scanner_install_node_command():
-    registry = CommandRegistry(None)
     ctx = DummyContext()
-    await registry._handle_scanner_install(ctx, {"name": "eslint"})
-    assert "To install eslint, run: npm install -g eslint" in ctx.output[0]
+    await _handle_install(ctx, {"name": "eslint"})
+    assert "npm install -g eslint" in ctx.output[0]
 
 @pytest.mark.asyncio
 async def test_scanner_install_binary_command():
-    registry = CommandRegistry(None)
     ctx = DummyContext()
-    await registry._handle_scanner_install(ctx, {"name": "trufflehog"})
-    assert "download the binary" in ctx.output[0].lower()
+    await _handle_install(ctx, {"name": "trufflehog"})
+    assert "package manager" in ctx.output[0].lower()
 
 @pytest.mark.asyncio
 async def test_scanner_install_not_found():
-    registry = CommandRegistry(None)
     ctx = DummyContext()
-    await registry._handle_scanner_install(ctx, {"name": "not_a_real_scanner"})
-    assert "ERROR: Scanner not_a_real_scanner not found" in ctx.output[0]
+    await _handle_install(ctx, {"name": "not_a_real_scanner"})
+    assert "ERROR: Scanner 'not_a_real_scanner' not found" in ctx.output[0]
