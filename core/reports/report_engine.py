@@ -58,7 +58,7 @@ class ReportEngine:
         if output_path is None:
             reports_dir = self._projects_dir / project_id / "audit_reports"
             reports_dir.mkdir(parents=True, exist_ok=True)
-            ts       = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+            ts       = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
             filename = f"report_{resolved_job_id[:8]}_{ts}.{fmt}"
             output_path = reports_dir / filename
 

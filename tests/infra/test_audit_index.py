@@ -12,7 +12,7 @@ def project_id():
 @pytest.mark.asyncio
 async def test_schema_creates_tables(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-    conn = await open_index()
+    conn = await open_index("test-project")
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row["name"] for row in cursor.fetchall()}
@@ -23,7 +23,7 @@ async def test_schema_creates_tables(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_wal_pragma_active(monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
-    conn = await open_index()
+    conn = await open_index("test-project")
     cursor = conn.cursor()
     cursor.execute("PRAGMA journal_mode")
     mode = cursor.fetchone()[0]
@@ -43,7 +43,7 @@ async def test_upsert_run_inserts_row(project_id, monkeypatch, tmp_path):
         "findings": [{"fingerprint": "fp1", "rule_id": "rule1", "severity": "HIGH", "category": "sec", "file": "test.py"}]
     }
     await upsert_run(project_id, summary, job_dir)
-    conn = await open_index()
+    conn = await open_index(project_id)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM runs WHERE run_id='job1'")
     row = cursor.fetchone()
@@ -65,8 +65,8 @@ async def test_upsert_run_idempotent(project_id, monkeypatch, tmp_path):
     }
     await upsert_run(project_id, summary, job_dir)
     await upsert_run(project_id, summary, job_dir)
-    
-    conn = await open_index()
+
+    conn = await open_index(project_id)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM runs WHERE run_id='job1'")
     count = cursor.fetchone()[0]
@@ -88,11 +88,11 @@ async def test_rebuild_index_produces_rows(project_id, monkeypatch, tmp_path):
         }
         with open(job_dir / "audit_summary.json", "w") as f:
             json.dump(summary, f)
-            
-    res = await rebuild_index()
+
+    res = await rebuild_index(project_id)
     assert res["runs_indexed"] == 3
-    
-    conn = await open_index()
+
+    conn = await open_index(project_id)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM runs")
     assert cursor.fetchone()[0] == 3
@@ -110,12 +110,12 @@ async def test_rebuild_index_idempotent(project_id, monkeypatch, tmp_path):
     }
     with open(job_dir / "audit_summary.json", "w") as f:
         json.dump(summary, f)
-        
-    await rebuild_index()
-    res2 = await rebuild_index()
+
+    await rebuild_index(project_id)
+    res2 = await rebuild_index(project_id)
     assert res2["runs_indexed"] == 1
-    
-    conn = await open_index()
+
+    conn = await open_index(project_id)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM runs")
     assert cursor.fetchone()[0] == 1
@@ -125,7 +125,7 @@ async def test_rebuild_index_idempotent(project_id, monkeypatch, tmp_path):
 async def test_findings_table_lifecycle(project_id, monkeypatch, tmp_path):
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     job_dir = tmp_path / "jobs" / "job1"
-    
+
     # Run 1: Two new findings
     summary1 = {
         "job_id": "job1",
@@ -136,12 +136,12 @@ async def test_findings_table_lifecycle(project_id, monkeypatch, tmp_path):
         ]
     }
     await upsert_run(project_id, summary1, job_dir)
-    
-    conn = await open_index()
+
+    conn = await open_index(project_id)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM findings WHERE status='new'")
     assert cursor.fetchone()[0] == 2
-    
+
     # Run 2: One persists, one is resolved, one new
     summary2 = {
         "job_id": "job2",
@@ -152,14 +152,14 @@ async def test_findings_table_lifecycle(project_id, monkeypatch, tmp_path):
         ]
     }
     await upsert_run(project_id, summary2, job_dir)
-    
+
     cursor.execute("SELECT status FROM findings WHERE fingerprint='fp1'")
     assert cursor.fetchone()[0] == 'open'
-    
+
     cursor.execute("SELECT status FROM findings WHERE fingerprint='fp2'")
     assert cursor.fetchone()[0] == 'resolved'
-    
+
     cursor.execute("SELECT status FROM findings WHERE fingerprint='fp3'")
     assert cursor.fetchone()[0] == 'new'
-    
+
     conn.close()

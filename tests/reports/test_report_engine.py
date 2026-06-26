@@ -37,9 +37,9 @@ class TestLoadResult:
     async def test_load_result_latest_job(self, tmp_projects_dir, completed_job_dir):
         """Test loading the latest job result."""
         jobs_dir, original_data = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         result_data, resolved_job_id = await engine._load_result(project_id, None)
         
         assert result_data is not None
@@ -53,7 +53,7 @@ class TestLoadResult:
         jobs_dir, jobs_by_id = multiple_jobs_dir
         project_id = jobs_dir.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         # Load specific job
         result_data, resolved_job_id = await engine._load_result(project_id, "job-001")
@@ -76,9 +76,9 @@ class TestLoadResult:
     async def test_load_result_job_not_found(self, completed_job_dir, tmp_projects_dir):
         """Test error when specific job doesn't exist."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         with pytest.raises(FileNotFoundError, match="Job 'nonexistent' not found"):
             await engine._load_result(project_id, "nonexistent")
@@ -86,10 +86,12 @@ class TestLoadResult:
     @pytest.mark.asyncio
     async def test_load_result_no_completed_audit(self, tmp_projects_dir):
         """Test error when no completed audits exist."""
-        projects_dir = tmp_projects_dir.parent
+        projects_dir = tmp_projects_dir
         project_id = "project-no-audits"
-        project_dir = projects_dir / project_id
-        project_dir.mkdir()
+        # Create the jobs/ dir so _load_result passes the existence check
+        # and reaches the "No completed audit" branch
+        jobs_dir = projects_dir / project_id / "jobs"
+        jobs_dir.mkdir(parents=True)
         
         engine = ReportEngine(projects_dir)
         
@@ -108,7 +110,7 @@ class TestLoadResult:
         # Create empty JSON file
         (job_dir / "audit_data_complete.json").write_text("{}")
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         with pytest.raises(FileNotFoundError, match="audit_data_complete.json empty or missing"):
             await engine._load_result(project_id, job_id)
@@ -121,9 +123,9 @@ class TestReportGeneration:
     async def test_generate_markdown_report(self, completed_job_dir, tmp_projects_dir):
         """Test generating a markdown report."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         output_path = await engine.generate(
             project_id=project_id,
@@ -140,9 +142,9 @@ class TestReportGeneration:
     async def test_generate_json_report(self, completed_job_dir, tmp_projects_dir):
         """Test generating a JSON report."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         output_path = await engine.generate(
             project_id=project_id,
@@ -162,9 +164,9 @@ class TestReportGeneration:
     async def test_generate_with_custom_output_path(self, completed_job_dir, tmp_projects_dir, tmp_path):
         """Test generating report to custom path."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         custom_path = tmp_path / "custom_report.md"
         
         output_path = await engine.generate(
@@ -183,7 +185,7 @@ class TestReportGeneration:
         jobs_dir, _ = multiple_jobs_dir
         project_id = jobs_dir.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         output_path = await engine.generate(
             project_id=project_id,
@@ -199,9 +201,9 @@ class TestReportGeneration:
     async def test_generate_unsupported_format(self, completed_job_dir, tmp_projects_dir):
         """Test error for unsupported format."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         with pytest.raises(ValueError, match="Unsupported format"):
             await engine.generate(
@@ -214,9 +216,9 @@ class TestReportGeneration:
     async def test_generate_auto_naming(self, completed_job_dir, tmp_projects_dir):
         """Test auto-generated report filename includes timestamp."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         output_path1 = await engine.generate(
             project_id=project_id,
@@ -242,9 +244,9 @@ class TestListReports:
     async def test_list_reports_empty(self, completed_job_dir, tmp_projects_dir):
         """Test listing reports when none exist."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         reports = await engine.list_reports(project_id)
         
@@ -254,9 +256,9 @@ class TestListReports:
     async def test_list_reports_multiple(self, completed_job_dir, tmp_projects_dir):
         """Test listing multiple reports."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         # Generate multiple reports
         for i in range(3):
@@ -275,7 +277,7 @@ class TestListReports:
     @pytest.mark.asyncio
     async def test_list_reports_no_project(self, tmp_projects_dir):
         """Test listing reports when project doesn't exist."""
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         reports = await engine.list_reports("nonexistent-project")
         
@@ -297,7 +299,7 @@ class TestReportEngineErrorHandling:
         # Write invalid JSON
         (job_dir / "audit_data_complete.json").write_text("{ invalid json }")
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         with pytest.raises(Exception):  # JSON decode error
             await engine.generate(
@@ -310,9 +312,9 @@ class TestReportEngineErrorHandling:
     async def test_generate_permission_error_on_write(self, completed_job_dir, tmp_projects_dir, monkeypatch):
         """Test error handling when unable to write report."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         # Mock Path.write_text to raise permission error
         original_write_text = Path.write_text
@@ -339,9 +341,9 @@ class TestReportEngineIntegration:
     async def test_full_workflow_markdown(self, completed_job_dir, tmp_projects_dir):
         """Test complete workflow: generate and list reports."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         # Generate reports
         for i in range(2):
@@ -365,9 +367,9 @@ class TestReportEngineIntegration:
     async def test_full_workflow_json(self, completed_job_dir, tmp_projects_dir):
         """Test complete workflow with JSON format."""
         jobs_dir, _ = completed_job_dir
-        project_id = jobs_dir.parent.name
+        project_id = jobs_dir.parent.parent.name
         
-        engine = ReportEngine(tmp_projects_dir.parent)
+        engine = ReportEngine(tmp_projects_dir)
         
         # Generate JSON and markdown
         md_path = await engine.generate(
