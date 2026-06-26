@@ -1,11 +1,12 @@
 import pytest
 import json
 import subprocess
+import sys
 
 def test_stdio_purity():
     """Start the server, send initialize, assert stdout is valid JSON-RPC."""
     proc = subprocess.Popen(
-        ["python", "-m", "core.mcp.server"],
+        [sys.executable, "-m", "core.mcp.server"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
