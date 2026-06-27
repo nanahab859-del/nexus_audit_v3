@@ -18,6 +18,9 @@ from core.primitives.security import encrypt, decrypt
 
 import asyncio
 
+class DuplicateNameError(ValueError):
+    """Raised when attempting to register a project name that already exists."""
+    pass
 
 class SettingsManager:
 
@@ -74,12 +77,29 @@ class SettingsManager:
             except (OSError, PermissionError) as e:
                 logging.error(f"Cannot save workspace: {e}")
 
+    async def _get_project_by_path(self, path: str) -> Optional[Project]:
+        workspace = await self.load_workspace()
+        resolved = str(Path(path).resolve())
+        for proj in workspace.projects.values():
+            if proj.path == resolved:
+                return proj
+        return None
+
     # ── Project lifecycle ──────────────────────────────────────────────────────
 
     async def register_project(self, name: str, path: str) -> Project:
         resolved_path = Path(path).resolve()
         if not resolved_path.exists() or not resolved_path.is_dir():
             raise ValueError(f"Path does not exist or is not a directory: {path}")
+
+        existing_proj = await self._get_project_by_path(str(resolved_path))
+        if existing_proj:
+            return existing_proj
+
+        workspace = await self.load_workspace()
+        for proj in workspace.projects.values():
+            if proj.name == name:
+                raise DuplicateNameError(f"A project with the name '{name}' already exists.")
 
         project_id  = str(uuid.uuid4())
         project_dir = self._projects_dir / project_id

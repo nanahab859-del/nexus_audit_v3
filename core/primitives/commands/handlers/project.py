@@ -1,6 +1,7 @@
 from pathlib import Path
 from core.primitives.commands.context import READONLY, ADMIN
 from core.primitives.commands.handlers._utils import resolve_project_id
+from core.primitives.settings import DuplicateNameError
 
 
 def register(registry) -> None:
@@ -10,13 +11,13 @@ def register(registry) -> None:
     registry.register(Command(
         name="project:register",
         description="Register a local path as an auditable project.",
-        usage="project:register --path PATH [--name NAME]",
+        usage="project:register --path PATH --name NAME",
         handler=_handle_register,
         required_privilege=ADMIN,
         parser=(
             CommandParser("project:register")
-            .add_argument("--path", default=".", help="Path to project root")
-            .add_argument("--name", default="default", help="Human-readable project name")
+            .add_argument("--path", required=True, help="Absolute or relative path to project root")
+            .add_argument("--name", required=True, help="Human-readable project name (must be unique)")
         ),
     ))
 
@@ -62,11 +63,26 @@ def register(registry) -> None:
 async def _handle_register(ctx, params):
     path = str(Path(params["path"]).expanduser().resolve())
     name = params["name"]
-    proj = await ctx.settings_manager.register_project(name, path)
-    ctx.mark_dirty()
-    ctx.write(f"Project '{name}' registered at {path}")
-    ctx.write(f"  ID prefix : {proj.id[:8]}")
-    ctx.write(f"  Activate  : workspace:active {proj.id[:8]}")
+
+    existing_proj = await ctx.settings_manager._get_project_by_path(path)
+    if existing_proj:
+        await ctx.settings_manager.set_active_project(existing_proj.id)
+        ctx.mark_dirty()
+        ctx.write(f"Project is already registered at {path}.")
+        ctx.write(f"  Name      : {existing_proj.name}")
+        ctx.write(f"  ID prefix : {existing_proj.id[:8]}")
+        ctx.write(f"  Activated automatically.")
+        return
+
+    try:
+        proj = await ctx.settings_manager.register_project(name, path)
+        ctx.mark_dirty()
+        ctx.write(f"Project '{name}' registered at {path}")
+        ctx.write(f"  ID prefix : {proj.id[:8]}")
+        ctx.write(f"  Activate  : workspace:active {proj.id[:8]}")
+    except DuplicateNameError as e:
+        ctx.write_error(str(e))
+        ctx.write_error("Please provide a unique name using the '--name' flag.")
 
 
 async def _handle_list(ctx, params):
