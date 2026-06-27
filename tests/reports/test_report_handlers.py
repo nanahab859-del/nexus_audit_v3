@@ -34,7 +34,11 @@ def registry_with_report_handler(tmp_path, monkeypatch):
     
     registry = CommandRegistry(sm)
     
-    return registry, context, sm, proj
+    yield registry, context, sm, proj
+    try:
+        asyncio.run(sm.delete_project(proj.id))
+    except Exception:
+        pass
 
 
 @pytest.fixture
@@ -65,7 +69,11 @@ def completed_audit_with_reports(tmp_path, monkeypatch, sample_result_data):
     
     registry = CommandRegistry(sm)
     
-    return registry, context, sm, proj, job_id
+    yield registry, context, sm, proj, job_id
+    try:
+        asyncio.run(sm.delete_project(proj.id))
+    except Exception:
+        pass
 
 
 class TestReportGenerateCommand:

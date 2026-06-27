@@ -17,7 +17,11 @@ def registry_and_context(tmp_path, monkeypatch):
         privilege_level=2,
     )
     registry = CommandRegistry(sm)
-    return registry, context, sm, proj
+    yield registry, context, sm, proj
+    try:
+        asyncio.run(sm.delete_project(proj.id))
+    except Exception:
+        pass
 
 @pytest.mark.asyncio
 async def test_rebuild_index_no_project(registry_and_context):

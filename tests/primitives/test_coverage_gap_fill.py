@@ -36,7 +36,14 @@ def registry_and_context(tmp_path, monkeypatch):
         orchestrator=mock_orch
     )
     registry = CommandRegistry(sm, orchestrator=mock_orch)
-    return registry, context, sm, proj
+    yield registry, context, sm, proj
+    # Teardown: delete every project registered during this test
+    ws = asyncio.run(sm.load_workspace())
+    for pid in list(ws.projects.keys()):
+        try:
+            asyncio.run(sm.delete_project(pid))
+        except Exception:
+            pass
 
 @pytest.mark.asyncio
 async def test_audit_run_success(registry_and_context):
@@ -280,7 +287,7 @@ async def test_project_delete_success(registry_and_context):
     reg, ctx, sm, proj = registry_and_context
     await reg.execute(f"project:delete {proj.id}", ctx)
     assert ctx.workspace_dirty
-    assert "deleted" in ctx.stdout_buffer[-1]
+    assert "Deleted:" in ctx.stdout_buffer[-1]
 
 @pytest.mark.asyncio
 async def test_settings_get_project_keyerror(registry_and_context):

@@ -16,7 +16,8 @@ def registry_and_context(tmp_path, monkeypatch):
         privilege_level=2,
     )
     registry = CommandRegistry(sm)
-    return registry, context, sm, proj
+    yield registry, context, sm, proj
+    asyncio.run(sm.delete_project(proj.id))
 
 @pytest.mark.asyncio
 async def test_all_commands_functional(registry_and_context):

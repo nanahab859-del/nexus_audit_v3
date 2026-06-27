@@ -29,7 +29,14 @@ def registry_and_context(tmp_path, monkeypatch):
         privilege_level=2,  # OPERATOR
     )
     registry = CommandRegistry(sm)
-    return registry, context, sm, proj
+    yield registry, context, sm, proj
+    # Teardown: delete every project registered during this test
+    ws = asyncio.run(sm.load_workspace())
+    for pid in list(ws.projects.keys()):
+        try:
+            asyncio.run(sm.delete_project(pid))
+        except Exception:
+            pass
 
 
 # ── _get_nested (lives in config handler) ──────────────────────────────────

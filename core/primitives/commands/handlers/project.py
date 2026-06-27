@@ -40,10 +40,13 @@ def register(registry) -> None:
     registry.register(Command(
         name="project:delete",
         description="Delete a registered project. Accepts full UUID or 8-char prefix.",
-        usage="project:delete <project_id>",
+        usage="project:delete <project_id> [project_id ...]",
         handler=_handle_delete,
         required_privilege=ADMIN,
-        parser=CommandParser("project:delete").add_argument("project_id"),
+        parser=CommandParser("project:delete").add_argument(
+            "project_id", nargs="+",
+            help="One or more project IDs or 8-char prefixes"
+        ),
     ))
 
     registry.register(Command(
@@ -73,7 +76,11 @@ async def _handle_list(ctx, params):
     active_id = ctx.workspace.active_project_id
     ctx.write(f"  {'ID':<10} {'NAME':<24} PATH")
     ctx.write(f"  {'─'*10} {'─'*24} {'─'*40}")
-    for pid, proj in ctx.workspace.projects.items():
+    for pid, proj in sorted(
+        ctx.workspace.projects.items(),
+        key=lambda kv: getattr(kv[1], "registered_at", ""),
+        reverse=True
+    ):
         marker = " *" if pid == active_id else "  "
         ctx.write(f"{marker} {pid[:8]}  {proj.name:<24}  {proj.path}")
     ctx.write("")
@@ -111,14 +118,22 @@ async def _handle_info(ctx, params):
 
 
 async def _handle_delete(ctx, params):
-    full_pid = resolve_project_id(ctx, params["project_id"])
-    if full_pid is None:
-        return   # error already written
+    project_ids = params["project_id"]
+    if isinstance(project_ids, str):
+        project_ids = [project_ids]
 
-    name = ctx.workspace.projects[full_pid].name
-    await ctx.settings_manager.delete_project(full_pid)
-    ctx.mark_dirty()
-    ctx.write(f"Project '{name}' ({full_pid[:8]}) deleted.")
+    deleted = []
+    for raw_id in project_ids:
+        full_pid = resolve_project_id(ctx, raw_id)
+        if full_pid is None:
+            continue
+        name = ctx.workspace.projects[full_pid].name
+        await ctx.settings_manager.delete_project(full_pid)
+        ctx.mark_dirty()
+        deleted.append(f"'{name}' ({full_pid[:8]})")
+
+    if deleted:
+        ctx.write(f"Deleted: {', '.join(deleted)}")
 
 
 async def _handle_clear(ctx, params):
