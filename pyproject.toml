@@ -1,22 +1,58 @@
 [project]
 name = "nexus-audit"
 version = "0.1.0"
-<<<<<<< HEAD
-<<<<<<< HEAD
 dependencies = [
     "click",
     "prompt-toolkit",
     "fastmcp>=3.0,<4",
     "mcp>=1.25,<2",
     "pydantic>=2.5",
-    "aiosqlite>=0.20"
+    "aiosqlite>=0.20",
+    "aiofiles",
+    "aiohttp",
+    "cryptography",
+    "PyYAML",
+    "pathspec",
+    "grimp"
 ]
-=======
-dependencies = ["click", "prompt-toolkit", "grimp"]
->>>>>>> 888fd75 (When, throughout all iterations, what is it about?)
-=======
-dependencies = ["click", "prompt-toolkit", "grimp"]
->>>>>>> a9cc1e3 (chore: save local changes before external integration)
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio"
+]
+quality = [
+    "ruff",
+    "mypy",
+    "djlint",
+    "pylint",
+    "vulture",
+    "radon"
+]
+security = [
+    "bandit",
+    "semgrep"
+]
+architecture = [
+    "lizard"
+]
+dependency = [
+    "pip-audit",
+    "pip-licenses"
+]
+scanners = [
+    "bandit",
+    "semgrep",
+    "pip-audit",
+    "pip-licenses",
+    "radon",
+    "vulture",
+    "pylint",
+    "djlint",
+    "mypy",
+    "ruff",
+    "lizard"
+]
 
 [project.scripts]
 nexus = "cli:main"
