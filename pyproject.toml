@@ -7,7 +7,50 @@ dependencies = [
     "fastmcp>=3.0,<4",
     "mcp>=1.25,<2",
     "pydantic>=2.5",
-    "aiosqlite>=0.20"
+    "aiosqlite>=0.20",
+    "aiofiles",
+    "aiohttp",
+    "cryptography",
+    "PyYAML",
+    "pathspec"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio"
+]
+quality = [
+    "ruff",
+    "mypy",
+    "djlint",
+    "pylint",
+    "vulture",
+    "radon"
+]
+security = [
+    "bandit",
+    "semgrep"
+]
+architecture = [
+    "lizard"
+]
+dependency = [
+    "pip-audit",
+    "pip-licenses"
+]
+scanners = [
+    "bandit",
+    "semgrep",
+    "pip-audit",
+    "pip-licenses",
+    "radon",
+    "vulture",
+    "pylint",
+    "djlint",
+    "mypy",
+    "ruff",
+    "lizard"
 ]
 
 [project.scripts]

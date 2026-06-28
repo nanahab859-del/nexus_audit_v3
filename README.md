@@ -24,18 +24,100 @@ For standard single-workspace development or usage, set up your environment as f
 git clone <repository_url> nexus_audit
 cd nexus_audit
 
-# 2. Create a fresh virtual environment
+# 2. Create a fresh virtual environment (ALWAYS use python3)
 python3 -m venv .venv
 
 # 3. Activate the environment
 source .venv/bin/activate
 
-# 4. Install the tool in editable mode
+# 4. Install the tool and all runtime dependencies
 pip install -e .
+```
 
+### Installing Scanners
+
+Nexus Audit supports scanners across four categories. Some are installed via `pip`, others via system package managers. Install only what you need.
+
+#### Quick Reference — Pip-Managed Scanners
+
+You can install scanners by category, or install all of them at once:
+
+```bash
+# Install by category (pick the ones you need):
+pip install -e .[quality]       # ruff, mypy, djlint, pylint, vulture, radon
+pip install -e .[security]      # bandit, semgrep
+pip install -e .[architecture]  # lizard
+pip install -e .[dependency]    # pip-audit, pip-licenses
+
+# Install ALL pip-managed scanners in one command:
+pip install -e .[scanners]
+
+# Developers — install everything (scanners + test tools):
+pip install -e .[dev,scanners]
+```
+
+#### System-Level Scanners (Cannot be installed via pip)
+
+> **These two scanners require separate installation outside of pip.** Without them, those specific scanners will simply report as unavailable — the rest of the tool works fine.
+
+**TruffleHog** (Security — Git secret scanning)
+TruffleHog is a Go binary. Install it with:
+```bash
+# Linux (via official install script):
+curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
+# macOS (via Homebrew):
+brew install trufflehog
+
+# Verify installation:
+trufflehog --version
+```
+
+**ESLint** (Quality — JavaScript/TypeScript linting)
+ESLint is an NPM package and must be installed via Node.js. It should be installed **inside the project you are auditing**, not globally:
+```bash
+# Inside the JavaScript project you want to audit:
+npm install --save-dev eslint
+
+# Or, to install globally on your system:
+npm install -g eslint
+
+# Verify installation:
+eslint --version
+```
+
+#### Built-in Scanners (No installation required)
+
+These two scanners are implemented as pure Python inside Nexus Audit and require no external tools:
+
+- **SecretScrub** — Scans all files for hardcoded secrets, AWS keys, GitHub tokens, and private key headers using regex + entropy analysis.
+- **Django Settings** — Audits Django `settings.py` files for insecure production configurations (`DEBUG=True`, `ALLOWED_HOSTS=*`, etc.).
+
+#### Complete Scanner Reference
+
+| Scanner | Category | Install Method | Command |
+|---|---|---|---|
+| `ruff` | quality | pip | `pip install ruff` |
+| `mypy` | quality | pip | `pip install mypy` |
+| `pylint` | quality | pip | `pip install pylint` |
+| `djlint` | quality | pip | `pip install djlint` |
+| `vulture` | quality | pip | `pip install vulture` |
+| `radon` | quality | pip | `pip install radon` |
+| `bandit` | security | pip | `pip install bandit` |
+| `semgrep` | security | pip | `pip install semgrep` |
+| `trufflehog` | security | **system binary** | See TruffleHog section above |
+| `lizard` | architecture | pip | `pip install lizard` |
+| `pip-audit` | dependency | pip | `pip install pip-audit` |
+| `pip-licenses` | dependency | pip | `pip install pip-licenses` |
+| `eslint` | quality | **npm** | See ESLint section above |
+| `secretscrub` | security | **built-in** | No install needed |
+| `django_settings` | security | **built-in** | No install needed |
+
+```bash
 # 5. Start the interactive shell
 nexus
 ```
+
 
 ## Git Worktree Setup (Critical Rules)
 
