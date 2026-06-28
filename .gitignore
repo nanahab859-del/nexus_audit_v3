@@ -31,3 +31,5 @@ lod/audit_data_complete.json
 .coverage
 .coverage-*
 *.sh
+
+.nexus_secret
