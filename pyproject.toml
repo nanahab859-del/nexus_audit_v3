@@ -14,8 +14,6 @@ dependencies = [
     "PyYAML",
     "pathspec",
     "grimp"
-    "pathspec",
-    "grimp"
 ]
 
 [project.optional-dependencies]
