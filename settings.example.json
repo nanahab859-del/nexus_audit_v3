@@ -1,0 +1,99 @@
+{
+  "_comment": "This is an example of the structure nexus-audit stores at ~/.nexus_audit/workspace.json",
+  "_comment2": "Do NOT put this file in your project root. It is a reference only.",
+  "_comment3": "Copy the structure below to understand what fields are available.",
+
+  "active_project_id": "your-project-uuid-here",
+
+  "global_settings": {
+    "ai_enabled": false,
+    "ai_provider": "claude",
+    "ai_model": "claude-3-5-sonnet-20240620",
+    "api_key": "",
+    "ui_theme": "dark"
+  },
+
+  "projects": {
+    "your-project-uuid-here": {
+      "id": "your-project-uuid-here",
+      "name": "My Project",
+      "path": "/absolute/path/to/your/project",
+      "registered_at": "2026-01-01T00:00:00+00:00",
+      "last_audited_at": null,
+      "job_history": [],
+
+      "settings": {
+        "project_path": "/absolute/path/to/your/project",
+        "project_name": "My Project",
+
+        "scanners": {
+          "bandit": true,
+          "vulture": true,
+          "radon": true,
+          "semgrep": false,
+          "pylint": false,
+          "mypy": false,
+          "eslint": false,
+          "djlint": false,
+          "lizard": false,
+          "pip-audit": true
+        },
+
+        "scanner_configs": {
+          "bandit": {
+            "severity": "medium",
+            "confidence": "medium"
+          },
+          "vulture": {
+            "min_confidence": 80
+          },
+          "radon": {
+            "min_rank": "C"
+          }
+        },
+
+        "ignore_paths": [
+          "venv/",
+          ".venv/",
+          "node_modules/",
+          ".git/",
+          "__pycache__/",
+          "migrations/"
+        ],
+
+        "fail_on_severity": "CRITICAL",
+        "force_rescan": false,
+
+        "retention_policy": {
+          "max_jobs": 20,
+          "keep_reports": true,
+          "keep_trends": true,
+          "keep_milestone_jobs": true
+        },
+
+        "quality_gate": {
+          "max_critical": 0,
+          "max_high": 5,
+          "min_fleet_score": 0.0,
+          "min_cvss_threshold": 7.0,
+          "break_build_on_failure": true
+        },
+
+        "pipeline_config": {
+          "scanner_timeout": 300,
+          "max_concurrent_scanners": 4,
+          "path_match_mode": "glob",
+          "cache_scan_results": true,
+          "follow_symlinks": false
+        },
+
+        "suppression_policy": {
+          "rules": {
+            "B101": ["tests/"],
+            "V001": ["scripts/"]
+          }
+        }
+      }
+    }
+  }
+}

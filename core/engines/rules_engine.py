@@ -268,50 +268,111 @@ class RulesEngine:
         return findings
 
     def _evaluate_cycle(self, rule: RuleDefinition, dna: ProjectDNA) -> List[Finding]:
+        """
+        Detect import cycles using iterative Tarjan's Strongly Connected Components.
+
+        Iterative (not recursive) to avoid Python's default 1000-frame recursion
+        limit crashing on large or deeply nested codebases (spec Problem A).
+        Any SCC with more than one member is a cycle.
+        """
+        from typing import Iterator
+
+        # Build adjacency restricted to modules known to ProjectDNA
         graph: Dict[str, set] = {mp: set() for mp in dna.modules}
         for mp, mod in dna.modules.items():
             for imp in mod.imports:
                 if imp in dna.modules:
                     graph[mp].add(imp)
 
-        visited:  set[str] = set()
-        in_stack: set[str] = set()
+        # Iterative Tarjan's SCC
+        index_counter: List[int] = [0]
+        index:    Dict[str, int]  = {}
+        lowlink:  Dict[str, int]  = {}
+        on_stack: Dict[str, bool] = {}
+        tarjan_stack: List[str]                    = []
+        work_stack:   List[tuple[str, Iterator]]   = []
+        sccs: List[List[str]] = []
+
+        for start in dna.modules:
+            if start in index:
+                continue
+
+            index[start] = lowlink[start] = index_counter[0]
+            index_counter[0] += 1
+            tarjan_stack.append(start)
+            on_stack[start] = True
+            work_stack.append((start, iter(graph.get(start, []))))
+
+            while work_stack:
+                node, it = work_stack[-1]
+                pushed = False
+
+                for successor in it:
+                    if successor not in index:
+                        index[successor] = lowlink[successor] = index_counter[0]
+                        index_counter[0] += 1
+                        tarjan_stack.append(successor)
+                        on_stack[successor] = True
+                        work_stack.append((successor, iter(graph.get(successor, []))))
+                        pushed = True
+                        break
+                    elif on_stack.get(successor):
+                        lowlink[node] = min(lowlink[node], index[successor])
+
+                if pushed:
+                    continue
+
+                # All successors visited — pop and propagate lowlink to parent
+                work_stack.pop()
+                if work_stack:
+                    parent = work_stack[-1][0]
+                    lowlink[parent] = min(lowlink[parent], lowlink[node])
+
+                # SCC root: pop the component off the Tarjan stack
+                if lowlink[node] == index[node]:
+                    scc: List[str] = []
+                    while True:
+                        w = tarjan_stack.pop()
+                        on_stack[w] = False
+                        scc.append(w)
+                        if w == node:
+                            break
+                    if len(scc) > 1:
+                        sccs.append(scc)
+
+        # Convert SCCs to findings
         findings: List[Finding] = []
-        cycles_seen: set[frozenset] = set()
+        for scc in sccs:
+            scc_sorted = sorted(scc)
 
-        def dfs(node: str, stack: list[str]) -> None:
-            visited.add(node)
-            in_stack.add(node)
-            stack.append(node)
+            # Django-models suppression: intra-app model cycles are a common
+            # Django ORM pattern, not a true architectural violation.  Emit at
+            # INFO so they are visible but not counted as errors.
+            apps_in_scc = {dna.modules[m].app for m in scc if m in dna.modules}
+            is_intra_app_models = (
+                len(apps_in_scc) == 1
+                and all("models" in m for m in scc)
+            )
 
-            for neighbour in graph.get(node, []):
-                if neighbour not in visited:
-                    dfs(neighbour, stack)
-                elif neighbour in in_stack:
-                    idx = stack.index(neighbour)
-                    cycle = frozenset(stack[idx:])
-                    if cycle not in cycles_seen:
-                        cycles_seen.add(cycle)
-                        cycle_str = " → ".join(stack[idx:] + [neighbour])
-                        mod = dna.modules.get(node)
-                        findings.append(create_finding(
-                            scanner="rules_engine",
-                            rule_id=rule.id,
-                            file=mod.relative_path if mod else node,
-                            line=1, column=1,
-                            severity=rule.severity,
-                            category=rule.category,
-                            title=rule.name,
-                            description=f"Import cycle detected: {cycle_str}",
-                            suggestion=rule.suggestion or "Break the cycle by extracting shared logic.",
-                        ))
+            chain = " → ".join(scc_sorted + [scc_sorted[0]])
+            first_mod = dna.modules.get(scc_sorted[0])
+            severity = Severity.INFO if is_intra_app_models else rule.severity
+            description = (
+                f"Import cycle detected: {chain}"
+                + (" (intra-app models pattern — informational)" if is_intra_app_models else "")
+            )
 
-            stack.pop()
-            in_stack.discard(node)
-
-        for mp in dna.modules:
-            if mp not in visited:
-                dfs(mp, [])
+            findings.append(create_finding(
+                scanner="rules_engine",
+                rule_id=rule.id,
+                file=first_mod.relative_path if first_mod else scc_sorted[0],
+                line=1, column=1,
+                severity=severity,
+                category=rule.category,
+                title=rule.name,
+                description=description,
+                suggestion=rule.suggestion or "Break the cycle by extracting shared logic into a new module.",
+            ))
 
         return findings
 

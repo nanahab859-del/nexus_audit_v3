@@ -7,7 +7,7 @@ import ast as ast_module
 import re as re_module
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 
 from core.primitives.models import ModuleEntry, ProjectDNA, to_dict
 from core.primitives.events import EventBus, EventType
@@ -54,6 +54,60 @@ def _parse_python_imports(source: str, module_path: str) -> dict[str, int]:
                     resolved = node.module
                 imports[resolved] = node.lineno
 
+    return imports
+
+
+def _derive_root_packages(
+    project_root: Path,
+    files: list,
+    app_mappings: Optional[List[Dict]],
+) -> List[str]:
+    """
+    Determine the root package names to pass to grimp.build_graph().
+
+    If app_mappings is provided, use the top-level directory component of each
+    path_prefix as a root package.  Otherwise fall back to the top-level
+    directory of every discovered file.
+    """
+    roots: Set[str] = set()
+    if app_mappings:
+        for mapping in app_mappings:
+            prefix = mapping.get("path_prefix", "")
+            if prefix:
+                roots.add(prefix.replace("\\", "/").split("/")[0])
+    if not roots:
+        for f in files:
+            parts = f.relative_path.replace("\\", "/").split("/")
+            if parts[0] not in ("src", "backend", "lib", "source"):
+                roots.add(parts[0])
+            elif len(parts) > 1:
+                roots.add(parts[1])
+    # Strip any .py suffix that may have crept in, keep only valid identifiers
+    valid_roots = []
+    for r in roots:
+        clean = r.removesuffix(".py")
+        if clean and clean != "." and clean.isidentifier():
+            # grimp requires top-level packages (directories with __init__.py), not single files
+            if (project_root / clean / "__init__.py").exists():
+                valid_roots.append(clean)
+    return valid_roots
+
+
+def _imports_from_grimp(graph: Any, module_path: str) -> dict[str, int]:
+    """
+    Extract direct imports for *module_path* from a grimp graph.
+    Returns {imported_module_path: line_number}, matching the ModuleEntry.imports contract.
+    """
+    imports: dict[str, int] = {}
+    try:
+        for target in graph.find_modules_directly_imported_by(module_path):
+            details = graph.get_import_details(importer=module_path, imported=target)
+            if details:
+                imports[target] = details[0]["line_number"]
+            else:
+                imports[target] = 1  # line unknown — use conventional placeholder
+    except Exception as exc:  # pragma: no cover
+        logger.debug("grimp: could not read imports for %s: %s", module_path, exc)
     return imports
 
 
@@ -127,16 +181,44 @@ async def build_dna(
     bus: EventBus,
     app_mappings: Optional[List[Dict]] = None
 ) -> ProjectDNA:
-    
+
     await bus.publish_log("info", f"Starting DNA construction for {project_root}")
     await bus.publish_progress("dna_builder", 0, "Discovering files...")
-    
+
     files = await discover(project_root)
     total_files = len(files)
     modules: Dict[str, ModuleEntry] = {}
-        
+
+    # ------------------------------------------------------------------
+    # Build grimp import graph (once, for all Python files in the project)
+    # exclude_type_checking_imports=True ensures TYPE_CHECKING-guarded
+    # imports are never counted as real runtime dependencies (Problem B).
+    # ------------------------------------------------------------------
+    grimp_graph: Any = None
+    try:
+        import sys
+        import grimp  # type: ignore[import-untyped]
+        root_packages = _derive_root_packages(project_root, files, app_mappings)
+        if root_packages:
+            original_sys_path = list(sys.path)
+            try:
+                sys.path.insert(0, str(project_root))
+                grimp_graph = await asyncio.to_thread(
+                    grimp.build_graph,
+                    *root_packages,
+                    exclude_type_checking_imports=True,
+                )
+                logger.info("grimp graph built for packages: %s", root_packages)
+            finally:
+                sys.path = original_sys_path
+    except Exception as exc:
+        logger.exception(
+            "grimp: graph build failed, falling back to AST parser"
+        )
+        grimp_graph = None
+
     await bus.publish_progress("dna_builder", 50, "Parsing files...")
-    
+
     for f in files:
         lang = f.language           # already detected by discover()
         if lang == "unknown":
@@ -170,9 +252,17 @@ async def build_dna(
             logger.warning("Cannot read %s: %s", file_path, e)
             continue
 
+        # Exclude Django migration auto-generated files — they produce noise
+        # and are not architectural decisions worth tracking.
+        if ".migrations." in f".{module_path}.":
+            continue
+
         # Parse imports
         if lang == "python":
-            imports = _parse_python_imports(source, module_path)
+            if grimp_graph is not None and module_path in grimp_graph.modules:
+                imports = _imports_from_grimp(grimp_graph, module_path)
+            else:
+                imports = _parse_python_imports(source, module_path)
         elif lang in ("javascript", "typescript"):
             imports = _parse_js_imports(source, file_path)
         else:

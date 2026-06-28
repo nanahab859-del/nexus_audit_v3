@@ -12,7 +12,10 @@ dependencies = [
     "aiohttp",
     "cryptography",
     "PyYAML",
-    "pathspec"
+    "pathspec",
+    "grimp"
+    "pathspec",
+    "grimp"
 ]
 
 [project.optional-dependencies]
