@@ -32,4 +32,10 @@ lod/audit_data_complete.json
 .coverage-*
 *.sh
 
+# Windows metadata
+*:Zone.Identifier
+
+# Runtime artifacts
+htmlcov/
+.nexus_fix_queue.json
 .nexus_secret
