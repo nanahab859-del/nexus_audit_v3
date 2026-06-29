@@ -16,7 +16,10 @@ audit_history/
 .venv/
 venv/
 lod/audit_data_complete.json
-docs/
+*.json
+*.json
+
+!docs/
 !settings.example.json
 *.log
 *.csv
@@ -36,4 +39,3 @@ docs/
 htmlcov/
 .nexus_fix_queue.json
 .nexus_secret
-.grimp_cache
