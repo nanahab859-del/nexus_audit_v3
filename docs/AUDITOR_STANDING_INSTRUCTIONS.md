@@ -1,7 +1,7 @@
 # AUDITOR_STANDING_INSTRUCTIONS.md
 # Lead Code Auditor — Persistent Rules Across All Sessions
 **Created:** 2026-06-24
-**Last updated:** 2026-06-24 (nexus-gaming removed; branch register updated; BRANCH_AUDIT_REPORT.md written)
+**Last updated:** 2026-06-29 (multi-agent workspace isolation rule added; stale branch register cleared)
 **Maintained by:** Lead Code Auditor (Claude)
 **CRITICAL:** Read this file at the start of every new session, immediately after PROJECT_STATE.md.
 
@@ -13,6 +13,44 @@
 2. Read `docs/AUDITOR_STANDING_INSTRUCTIONS.md` — THIS FILE — standing rules and workspace map
 3. Verify any "pending" branches by reading actual files — never trust prior session reports
 4. Only then proceed with the session task
+
+---
+
+## Standing Rules for Multi-Agent Workspace Isolation
+
+**This project may have multiple independent agents working simultaneously in
+separate worktrees on separate branches — e.g. the auditor on `main`, an
+integration agent on `feature/legacy-feature-integration`, possibly others.**
+
+### Rule A1 — Never commit inside another agent's worktree, under any circumstance
+The auditor works exclusively in its own worktree (`/home/yusupha/my_tools/nexus_audit_v3/`
+on `main`). Never run `git commit`, `git add`, or any write operation inside another
+agent's worktree directory (e.g. `nexus_audit_v3_features/`), even to fix something,
+even if asked to "check on" that branch. Read-only inspection of another agent's
+worktree is fine. Writing or committing there is not.
+
+### Rule A2 — Never commit to a shared coordination file, even from your own worktree
+If a journal or coordination file (e.g. `INTEGRATION_JOURNAL.md`) is shared between
+agents as a communication channel, do not commit changes to it from the auditor's
+side — even on `main`, even if the file currently lives there. Shared files between
+independent agent branches create merge-conflict noise when branches are later
+rebased or merged, and commit ownership of a "neutral" file should not belong to
+either agent. Read it, and if a message needs to be left, write the content but flag
+it to Yusupha to commit, or note clearly in the message itself that it is uncommitted
+and pending human action — do not commit it yourself.
+**This was violated on 2026-06-29 — corrected. Documented here so it is never
+repeated.**
+
+### Rule A3 — Every agent must introduce itself in any shared coordination file
+When leaving a message in a journal or shared file: state who you are, your role,
+which worktree and branch you operate from, and what you do and do not do (e.g.
+"I read but do not write code directly"). A bare status update with no introduction
+is not acceptable — the reader on the other side needs to know who they are talking to.
+
+### Rule A4 — Branches and worktrees belonging to other agents are off-limits for
+independent fixes. If the auditor notices something wrong in another agent's
+active touch-map area (per their journal's File Touch Map), flag it in the
+journal — do not fix it directly, even on a different branch.
 
 ---
 
@@ -54,8 +92,18 @@ Verification grep: `grep -rn "sorted.*iterdir.*reverse=True" --include="*.py" | 
 Must return zero bare (no-key) hits.
 
 ### Rule V4 — .gitignore protection
-`docs/` must NEVER appear in `.gitignore`. Commit `bcdf324` explicitly removed it.
-If it reappears in any agent edit: `git checkout -- .gitignore` immediately.
+`docs/` must NEVER appear in `.gitignore`. If it reappears in any agent edit:
+`git checkout -- .gitignore` immediately. Note: as of 2026-06-29, most of `docs/`
+content was reorganised — only `PROJECT_STATE.md` and `AUDITOR_STANDING_INSTRUCTIONS.md`
+remain tracked there; everything else moved to `_archive/docs/` or the Obsidian vault.
+`docs/` itself must still never be gitignored.
+
+### Rule V5 — Agents must not make commits outside the explicitly stated task scope
+If an agent makes additional commits beyond what was asked (e.g. untracking files,
+"cleanup" commits not requested), read every such commit before accepting the work.
+Revert anything unauthorised. This happened once already this session — two
+unauthorised commits untracked `docs/AUDITOR_STANDING_INSTRUCTIONS.md` and
+`docs/PROJECT_STATE.md`. Both were reverted.
 
 ---
 
@@ -94,60 +142,42 @@ If it reappears in any agent edit: `git checkout -- .gitignore` immediately.
 - Source sync — disabled for local projects, `SyncConfig(enabled=False)`
 - `settings.scanners = {}` — means ALL installed scanners run
 - `_deserialise_project()` — single path used by both `load_workspace` and `load_project`
+- `--path` and `--name` — REQUIRED on `project:register`, no defaults (added 2026-06-26)
 
 ---
 
-## Complete Workspace Map (audited 2026-06-24)
+## Worktree Rules (learned 2026-06-26)
 
-All git repositories found under `/home/yusupha/`:
-
-| Path | Type | Purpose | Branches |
-|------|------|---------|---------|
-| `/home/yusupha/my_tools/nexus_audit_v3/` | Main repo | Active development — this project | See Branch Register below |
-| `/home/yusupha/my_tools/nexus_audit_v3-mcp-sqlite/` | **Worktree** of nexus_audit_v3 | Checked out on `feature/mcp-server-sqlite-index` | — (same repo) |
-| `/home/yusupha/my_tools/nexus_audit_v3_features/` | **Worktree** of nexus_audit_v3 | Checked out on `feature/f01-cycle-detection-grimp` | — (same repo) |
-| `/home/yusupha/my_tools/nexus_audit/` | Standalone repo | Older nexus_audit version | `main` only, 2 commits |
-| `/home/yusupha/my_tools/nexus_audit_backup_phase3/` | Standalone repo | Phase 3 backup snapshot | `master` only, 2 commits |
-| `/home/yusupha/my_tests/nexus-test-target/` | Standalone repo | NexusTestBed dummy project (24 planted issues) | `master` only |
-| `/home/yusupha/my-first-code/` | Standalone repo | Empty — no commits yet | `master` (no commits) |
-| `/home/yusupha/my_tools/` | Standalone repo | Wrapper/tools directory | `master`, 2 commits |
+- `.venv` is in `.gitignore` — it does NOT travel with worktrees
+- Each worktree needs its own fresh `pip install -e .` inside it
+- NEVER copy `.venv` from one worktree to another — editable installs have hardcoded absolute paths
 
 ---
 
-## Branch Ownership Register — nexus_audit_v3
+## Current Workspace Map (updated 2026-06-29)
 
-**Key:** AUDITOR = created by Lead Auditor (Claude) | YUSUPHA = created by Yusupha | UNKNOWN = unconfirmed
+| Path | Type | Purpose | Current branch |
+|------|------|---------|----------------|
+| `/home/yusupha/my_tools/nexus_audit_v3/` | Main repo, auditor's worktree | Active development — auditor operates here | `main` |
+| `/home/yusupha/my_tools/nexus_audit_v3_features/` | Worktree of nexus_audit_v3 | Independent integration agent — legacy feature porting | `feature/legacy-feature-integration` |
+| `/home/yusupha/my_tools/nexus_audit/` | Standalone repo | Older nexus_audit version (legacy tool) — used as comparison reference | `main` only |
+| `/home/yusupha/my_tools/nexus_audit_backup_phase3/` | Standalone repo | Phase 3 backup snapshot | `master` only |
+| `/home/yusupha/my_tests/nexus-test-target/` | Standalone repo | NexusTestBed dummy project (24 planted issues), registered project ID `501a6bc8...` | `master` only |
+| `/home/yusupha/my-first-code/` | Standalone repo | Empty — no commits yet | `master` |
+| `/home/yusupha/my_tools/` | Standalone repo | Wrapper/tools directory | `master` |
 
-| Branch | Owner | Date | Purpose | Ahead of main | Status | Notes |
-|--------|-------|------|---------|--------------|--------|-------|
-| `main` | — | — | Main branch | — | ACTIVE | HEAD: `54b5fce` |
-| `feature/audit-trend-diff-fixqueue` | UNKNOWN | — | Fix audit:history mtime sort + buffer clear after --follow | 0 (merged) | MERGED → `c53dc02` (2026-06-24) | **Confirm owner with Yusupha** |
-| `feature/trend-diff-fixqueue-mcp` | UNKNOWN | — | Placeholder for MCP trend/diff/fixqueue work | **0 — EMPTY, behind main by 5** | STALE — empty diff, should be deleted or rebased | **Confirm owner with Yusupha** |
-| `feature/f01-cycle-detection-grimp` | UNKNOWN | — | Cycle detection via grimp + SQLite/MCP work (merged with mcp-server-sqlite-index) | **10 commits ahead** | OPEN — worktree at `nexus_audit_v3_features/` | **Confirm owner with Yusupha** |
-| `feature/integrate-mcp-sqlite` | UNKNOWN | — | SQLite indexing for MCP server | **10 commits ahead — IDENTICAL to f01-cycle-detection-grimp** | OPEN — same tip commit `3d40179`, appears to be same branch under two names | **Confirm owner with Yusupha** |
-| `feature/mcp-server-sqlite-index` | UNKNOWN | — | MCP server SQLite index | **10 commits ahead** | OPEN — worktree at `nexus_audit_v3-mcp-sqlite/`, tip `27a2940` (4 more commits than integrate-mcp-sqlite) | **Confirm owner with Yusupha** |
-| `feature/legacy-feature-integration` | UNKNOWN | — | Legacy feature integration | **4 commits ahead** | OPEN — needs inspection before merge | **Confirm owner with Yusupha** |
-
-### nexus_audit_v3 — Findings & Questions for Yusupha
-
-1. **`feature/trend-diff-fixqueue-mcp`** — 0 commits ahead of main, 5 behind. It is an empty branch that is now stale. Was this created by you or by the auditor? Should it be deleted?
-
-2. **`feature/f01-cycle-detection-grimp` and `feature/integrate-mcp-sqlite`** — Both share the exact same tip commit (`3d40179`). They appear to be the same content under two branch names. Was one created as an alias of the other? Which is the canonical name to keep?
-
-3. **`feature/mcp-server-sqlite-index`** — Has 4 more commits than the above two (tip `27a2940`), checked out in the `nexus_audit_v3-mcp-sqlite/` worktree. This appears to be the most advanced version of the SQLite/MCP work. Is this the branch the auditor should review for merge next?
-
-4. **`feature/legacy-feature-integration`** — 4 commits ahead, last commit message is "When, throughout all iterations, what is it about?" — informal message, unclear intent. Was this your branch or the auditor's?
-
----
-
-## Other Repos — Status
-
-| Repo | Status | Action needed |
-|------|--------|--------------|
-| `nexus_audit` | Old version, `main` only, stable | No action — archive reference |
-| `nexus_audit_backup_phase3` | Phase 3 snapshot, `master` only | No action — archive reference |
-| `nexus-test-target` | Test target, `master` only | No action — used for NexusTestBed validation runs |
-| `my-first-code` | Empty repo, no commits | No action |
-| `my_tools` (root) | Wrapper, `master`, 2 commits | No action |
-
+**Note:** `feature/mcp-server-sqlite-index` worktree was removed 2026-06-27 after merge to main.
 **Note:** Other repositories on this machine (e.g. nexus-gaming) are outside auditor scope. Do not inspect, touch, or reference them.
+
+---
+
+## Active Multi-Agent Coordination
+
+**`INTEGRATION_JOURNAL.md`** (at repo root, tracked on `main`) is the shared
+coordination channel between the auditor and the integration agent working in
+`nexus_audit_v3_features/`. See Rule A2 — content may be written there but commits
+to that file should not be made by the auditor going forward; flag to Yusupha instead.
+
+Current state: integration agent is on Feature F-01 (circular dependency detection,
+language-agnostic rewrite using NetworkX two-tier SCC/enumeration). No conflict with
+main as of 2026-06-29.
