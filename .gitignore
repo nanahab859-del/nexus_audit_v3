@@ -39,3 +39,4 @@ lod/audit_data_complete.json
 htmlcov/
 .nexus_fix_queue.json
 .nexus_secret
+INTEGRATION_JOURNAL.md
