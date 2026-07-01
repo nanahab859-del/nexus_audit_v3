@@ -39,7 +39,7 @@ def _walk_project(
     if respect_gitignore:
         gitignore = project_root / ".gitignore"
         if gitignore.exists() and pathspec:
-            spec = pathspec.PathSpec.from_lines('gitwildmatch', gitignore.read_text().splitlines())
+            spec = pathspec.PathSpec.from_lines('gitignore', gitignore.read_text().splitlines())
             
     for root, dirs, files in os.walk(project_root):
         root_path = Path(root)

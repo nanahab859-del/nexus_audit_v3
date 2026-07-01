@@ -56,7 +56,8 @@ async def test_get_git_context_timeout(monkeypatch):
         return MockProc()
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
 
-    def mock_wait_for(aw, timeout):
+    async def mock_wait_for(aw, timeout):
+        aw.close()
         raise asyncio.TimeoutError()
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
 

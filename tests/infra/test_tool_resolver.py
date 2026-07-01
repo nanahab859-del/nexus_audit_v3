@@ -110,7 +110,8 @@ async def test_module_fallback_timeout(monkeypatch):
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_create_subprocess_exec)
     monkeypatch.setattr("asyncio.wait_for", lambda a, timeout: asyncio.sleep(0.01)) # we will mock the exception
     
-    def mock_wait_for(aw, timeout):
+    async def mock_wait_for(aw, timeout):
+        aw.close()
         raise asyncio.TimeoutError()
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
     

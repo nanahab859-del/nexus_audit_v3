@@ -167,6 +167,7 @@ async def test_run_git_command_terminate_exception(tmp_path, monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", mock_create)
     # mock wait_for to just raise TimeoutError
     async def mock_wait_for(coro, timeout):
+        coro.close()
         raise asyncio.TimeoutError()
     monkeypatch.setattr(asyncio, "wait_for", mock_wait_for)
 
